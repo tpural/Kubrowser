@@ -20,36 +20,46 @@ export function StatusBar({
   onDisconnect,
 }: StatusBarProps) {
   return (
-    <Card className="p-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant={connected ? "default" : "destructive"}>
-            {connected ? "Connected" : "Disconnected"}
-          </Badge>
-          {sessionId && (
-            <span className="text-sm text-muted-foreground">
-              Session: {sessionId.substring(0, 8)}...
-            </span>
-          )}
-          {podName && (
-            <span className="text-sm text-muted-foreground">
-              Pod: {podName}
-            </span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          {!connected && onReconnect && (
-            <Button size="sm" onClick={onReconnect}>
-              Reconnect
-            </Button>
-          )}
-          {connected && onDisconnect && (
-            <Button size="sm" variant="outline" onClick={onDisconnect}>
-              Disconnect
-            </Button>
-          )}
-        </div>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Badge 
+          variant={connected ? "default" : "destructive"}
+          className="font-medium"
+        >
+          <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${
+            connected ? "bg-green-500 animate-pulse" : "bg-red-500"
+          }`}></span>
+          {connected ? "Connected" : "Disconnected"}
+        </Badge>
+        {sessionId && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Session:</span>
+            <code className="px-2 py-0.5 bg-muted rounded text-xs font-mono">
+              {sessionId.substring(0, 8)}...
+            </code>
+          </div>
+        )}
+        {podName && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Pod:</span>
+            <code className="px-2 py-0.5 bg-muted rounded text-xs font-mono">
+              {podName}
+            </code>
+          </div>
+        )}
       </div>
-    </Card>
+      <div className="flex gap-2">
+        {!connected && onReconnect && (
+          <Button size="sm" onClick={onReconnect}>
+            Reconnect
+          </Button>
+        )}
+        {connected && onDisconnect && (
+          <Button size="sm" variant="outline" onClick={onDisconnect}>
+            Disconnect
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

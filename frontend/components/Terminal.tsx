@@ -10,6 +10,7 @@ interface TerminalProps {
   onConnect?: (sessionId: string) => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
+  shouldDisconnect?: boolean;
 }
 
 export function Terminal({
@@ -17,6 +18,7 @@ export function Terminal({
   onConnect,
   onDisconnect,
   onError,
+  shouldDisconnect = false,
 }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -27,6 +29,8 @@ export function Terminal({
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
     sessionId || null
   );
+  const [isLoading, setIsLoading] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(true);
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -48,16 +52,55 @@ export function Terminal({
 
     connectingRef.current = true;
 
-    // Initialize xterm
+    // Initialize xterm with theme-aware colors
+    const isDark = document.documentElement.classList.contains("dark");
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: "Monaco, Menlo, 'Ubuntu Mono', monospace",
-      theme: {
-        background: "#1e1e1e",
-        foreground: "#d4d4d4",
-        cursor: "#aeafad",
-      },
+      theme: isDark
+        ? {
+            background: "#0a0a0a",
+            foreground: "#e4e4e7",
+            cursor: "#f4f4f5",
+            black: "#18181b",
+            red: "#ef4444",
+            green: "#22c55e",
+            yellow: "#eab308",
+            blue: "#3b82f6",
+            magenta: "#a855f7",
+            cyan: "#06b6d4",
+            white: "#f4f4f5",
+            brightBlack: "#71717a",
+            brightRed: "#f87171",
+            brightGreen: "#4ade80",
+            brightYellow: "#fbbf24",
+            brightBlue: "#60a5fa",
+            brightMagenta: "#c084fc",
+            brightCyan: "#22d3ee",
+            brightWhite: "#ffffff",
+          }
+        : {
+            background: "#ffffff",
+            foreground: "#18181b",
+            cursor: "#09090b",
+            black: "#09090b",
+            red: "#dc2626",
+            green: "#16a34a",
+            yellow: "#ca8a04",
+            blue: "#2563eb",
+            magenta: "#9333ea",
+            cyan: "#0891b2",
+            white: "#f4f4f5",
+            brightBlack: "#71717a",
+            brightRed: "#ef4444",
+            brightGreen: "#22c55e",
+            brightYellow: "#eab308",
+            brightBlue: "#3b82f6",
+            brightMagenta: "#a855f7",
+            brightCyan: "#06b6d4",
+            brightWhite: "#ffffff",
+          },
     });
 
     const fitAddon = new FitAddon();
@@ -67,6 +110,62 @@ export function Terminal({
 
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
+
+    // Update terminal theme when dark mode changes
+    const updateTerminalTheme = () => {
+      if (!xtermRef.current) return;
+      const isDark = document.documentElement.classList.contains("dark");
+      xtermRef.current.options.theme = isDark
+        ? {
+            background: "#0a0a0a",
+            foreground: "#e4e4e7",
+            cursor: "#f4f4f5",
+            black: "#18181b",
+            red: "#ef4444",
+            green: "#22c55e",
+            yellow: "#eab308",
+            blue: "#3b82f6",
+            magenta: "#a855f7",
+            cyan: "#06b6d4",
+            white: "#f4f4f5",
+            brightBlack: "#71717a",
+            brightRed: "#f87171",
+            brightGreen: "#4ade80",
+            brightYellow: "#fbbf24",
+            brightBlue: "#60a5fa",
+            brightMagenta: "#c084fc",
+            brightCyan: "#22d3ee",
+            brightWhite: "#ffffff",
+          }
+        : {
+            background: "#ffffff",
+            foreground: "#18181b",
+            cursor: "#09090b",
+            black: "#09090b",
+            red: "#dc2626",
+            green: "#16a34a",
+            yellow: "#ca8a04",
+            blue: "#2563eb",
+            magenta: "#9333ea",
+            cyan: "#0891b2",
+            white: "#f4f4f5",
+            brightBlack: "#71717a",
+            brightRed: "#ef4444",
+            brightGreen: "#22c55e",
+            brightYellow: "#eab308",
+            brightBlue: "#3b82f6",
+            brightMagenta: "#a855f7",
+            brightCyan: "#06b6d4",
+            brightWhite: "#ffffff",
+          };
+    };
+
+    // Watch for theme changes
+    const observer = new MutationObserver(updateTerminalTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     // Handle window resize
     const handleResize = () => {
@@ -108,6 +207,7 @@ export function Terminal({
 
       ws.onopen = () => {
         connectingRef.current = false;
+        setIsConnecting(false);
         // Connection opened, wait for session message if new session
         if (!sessionId) {
           // Will receive session info in first message
@@ -124,6 +224,7 @@ export function Terminal({
             if (data.type === "session" && data.session_id) {
               sessionReceived = true;
               setCurrentSessionId(data.session_id);
+              setIsLoading(false);
               if (onConnect) {
                 onConnect(data.session_id);
               }
@@ -136,6 +237,7 @@ export function Terminal({
 
         // Terminal data
         if (xtermRef.current) {
+          setIsLoading(false);
           if (typeof event.data === "string") {
             xtermRef.current.write(event.data);
           } else if (event.data instanceof ArrayBuffer) {
@@ -154,6 +256,8 @@ export function Terminal({
 
       ws.onerror = (error) => {
         connectingRef.current = false;
+        setIsConnecting(false);
+        setIsLoading(false);
         console.error("WebSocket error:", error);
         if (onError) {
           onError("Connection error occurred");
@@ -162,6 +266,8 @@ export function Terminal({
 
       ws.onclose = (event) => {
         connectingRef.current = false;
+        setIsConnecting(false);
+        setIsLoading(false);
         // Don't trigger disconnect on normal closure or if we're reconnecting
         if (event.code !== 1000 && event.code !== 1001) {
           if (onDisconnect) {
@@ -172,7 +278,8 @@ export function Terminal({
 
       // Send input to WebSocket
       xterm.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        // Don't send data if disconnected
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           ws.send(data);
         }
       });
@@ -186,6 +293,7 @@ export function Terminal({
       initializedRef.current = false;
       connectingRef.current = false;
       window.removeEventListener("resize", handleResize);
+      observer.disconnect();
       if (wsRef.current) {
         wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;
@@ -199,8 +307,46 @@ export function Terminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handle disconnect request
+  useEffect(() => {
+    if (shouldDisconnect && wsRef.current) {
+      const ws = wsRef.current;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        // Close the WebSocket connection
+        ws.close(1000, "User requested disconnect");
+        wsRef.current = null;
+        setIsConnecting(false);
+        setIsLoading(false);
+        
+        // Clear terminal and show disconnected message
+        if (xtermRef.current) {
+          xtermRef.current.clear();
+          xtermRef.current.writeln("\r\n\x1b[31mDisconnected\x1b[0m - Connection closed by user.");
+          xtermRef.current.writeln("Press Reconnect to establish a new connection.");
+        }
+        
+        if (onDisconnect) {
+          onDisconnect();
+        }
+      }
+    }
+  }, [shouldDisconnect, onDisconnect]);
+
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full relative">
+      {(isLoading || isConnecting) && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="h-12 w-12 rounded-full border-4 border-muted"></div>
+              <div className="absolute top-0 left-0 h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {isConnecting ? "Connecting..." : "Loading terminal..."}
+            </p>
+          </div>
+        </div>
+      )}
       <div ref={terminalRef} className="h-full w-full" />
     </div>
   );
