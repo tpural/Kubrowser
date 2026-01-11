@@ -1,0 +1,53 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Dependencies (will be installed in container)
+node_modules
+vendor
+
+# Build outputs
+.next
+out
+build
+dist
+bin
+*.exe
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs
+
+# Kubernetes config (should never be in container)
+.kube
+*.kubeconfig
+kubeconfig
+
+# Docker
+Dockerfile.backend
+Dockerfile.frontend
+docker-compose.yml
+
+# Scripts (optional - include if needed)
+scripts/
+
+# Temporary files
+tmp
+temp
+*.tmp

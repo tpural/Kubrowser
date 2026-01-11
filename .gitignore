@@ -1,0 +1,65 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+server
+backend/server
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage/
+
+# Go workspace file
+go.work
+
+# Dependencies
+vendor/
+node_modules/
+
+# Frontend build outputs
+.next/
+out/
+build/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Pre-commit
+.secrets.baseline
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Kubernetes config (should never be committed)
+.kube/
+*.kubeconfig
+kubeconfig

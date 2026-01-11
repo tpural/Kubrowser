@@ -1,0 +1,127 @@
+# golangci-lint configuration following CNCF standards
+# Based on: https://github.com/cncf/tag-security/blob/main/supply-chain-security/signing-images/README.md
+
+run:
+  timeout: 5m
+  tests: true
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+      - exitAfterDefer
+  gocyclo:
+    min-complexity: 15
+  goimports:
+    local-prefixes: github.com/kubrowser
+  gomnd:
+    checks: argument,case,condition,operation,return,assign
+    ignored-numbers:
+      - "15" # Common timeout values
+      - "30" # Common timeout values
+      - "60" # Common timeout values
+  govet:
+    enable-all: true
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+  nolintlint:
+    allow-leading-space: true
+    allow-unused: false
+    require-explanation: false
+    require-specific: false
+  revive:
+    min-confidence: 0
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+        arguments:
+          - checkPrivateReceivers
+      - name: comment-spacings
+        severity: warning
+        disabled: false
+      - name: if-return
+        severity: warning
+        disabled: false
+  godot:
+    scope: all
+    exclude:
+      - "^TODO:"
+      - "^FIXME:"
+      - "^XXX:"
+      - "^HACK:"
+    capital: false
+    period: true
+  stylecheck:
+    checks: ["all", "-ST1003"] # ST1003: Poorly chosen identifier names (too opinionated)
+
+linters:
+  # Enable CNCF recommended linters (updated for latest versions)
+  enable:
+    - errcheck
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - godot
+    - gomnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+issues:
+  exclude-dirs:
+    - vendor
+    - node_modules
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*\\.gen\\.go$"
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gomnd
+        - errcheck
+        - gosec
+  max-issues-per-linter: 0
+  max-same-issues: 0

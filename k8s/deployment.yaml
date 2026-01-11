@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubrowser-backend
+  namespace: kubrowser
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubrowser-backend
+  template:
+    metadata:
+      labels:
+        app: kubrowser-backend
+    spec:
+      serviceAccountName: kubrowser-backend
+      containers:
+        - name: backend
+          image: kubrowser-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: POD_NAMESPACE
+              value: "default"
+            - name: POD_IMAGE
+              value: "bitnami/kubectl:latest"
+            - name: SESSION_TIMEOUT
+              value: "30m"
+            - name: MAX_SESSIONS_PER_USER
+              value: "5"
+            - name: POD_CPU_LIMIT
+              value: "500m"
+            - name: POD_MEMORY_LIMIT
+              value: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
