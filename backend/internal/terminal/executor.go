@@ -61,7 +61,7 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 		SubResource("exec").
 		VersionedParams(&v1.PodExecOptions{
 			Container: containerName,
-			Command:   []string{"/bin/sh"}, // Simple shell, no -i flag
+			Command:   []string{"/bin/bash", "-i"},
 			Stdin:     true,
 			Stdout:    true,
 			Stderr:    true,
@@ -243,7 +243,7 @@ func (e *Executor) ResizeTerminal(ctx context.Context, podName, containerName st
 		SubResource("exec").
 		VersionedParams(&v1.PodExecOptions{
 			Container: containerName,
-			Command:   []string{"/bin/sh"},
+			Command:   []string{"/bin/bash"},
 			Stdin:     false,
 			Stdout:    false,
 			Stderr:    false,
