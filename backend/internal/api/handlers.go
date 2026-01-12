@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -505,6 +507,217 @@ func (h *Handlers) HandleDeletePod(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "deleted", "pod": podName})
+}
+
+// HandlePodLogs streams logs from a pod.
+func (h *Handlers) HandlePodLogs(c *gin.Context) {
+	namespace := c.DefaultQuery("namespace", "default")
+	podName := c.Param("name")
+	containerName := c.DefaultQuery("container", "")
+	tailLines := c.DefaultQuery("tail", "100")
+	follow := c.DefaultQuery("follow", "true") == "true"
+	
+	ctx := c.Request.Context()
+	if !follow {
+		// For non-following logs, use a timeout
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+	}
+
+	// Get pod to find container name if not provided
+	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
+			return
+		}
+		h.logger.WithError(err).Error("Failed to get pod")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get pod"})
+		return
+	}
+
+	// Use first container if not specified
+	if containerName == "" && len(pod.Spec.Containers) > 0 {
+		containerName = pod.Spec.Containers[0].Name
+	}
+
+	// Parse tail lines
+	tailLinesInt := int64(100)
+	if tailLines != "" {
+		if parsed, err := strconv.ParseInt(tailLines, 10, 64); err == nil {
+			tailLinesInt = parsed
+		}
+	}
+
+	// Get logs
+	podLogOpts := &v1.PodLogOptions{
+		Container: containerName,
+		Follow:    follow,
+		TailLines: &tailLinesInt,
+	}
+
+	req := h.podManager.GetClient().CoreV1().Pods(namespace).GetLogs(podName, podLogOpts)
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to stream logs")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to stream logs"})
+		return
+	}
+	defer stream.Close()
+
+	c.Header("Content-Type", "text/plain; charset=utf-8")
+	c.Header("Cache-Control", "no-cache")
+	
+	// Stream logs to response
+	buf := make([]byte, 4096)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		n, err := stream.Read(buf)
+		if n > 0 {
+			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+				break
+			}
+			c.Writer.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				if !follow {
+					break
+				}
+				// For follow mode, EOF might be temporary, continue reading
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			h.logger.WithError(err).Error("Error reading logs")
+			break
+		}
+	}
+}
+
+// HandlePodExec handles WebSocket connections for exec into a pod.
+func (h *Handlers) HandlePodExec(c *gin.Context) {
+	namespace := c.DefaultQuery("namespace", "default")
+	podName := c.Param("name")
+	containerName := c.DefaultQuery("container", "")
+
+	// Upgrade to WebSocket
+	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to upgrade to WebSocket")
+		return
+	}
+	defer ws.Close()
+
+	h.logger.WithFields(logrus.Fields{
+		"pod":       podName,
+		"namespace": namespace,
+	}).Info("WebSocket upgraded successfully for exec")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set WebSocket close handler to cancel context
+	ws.SetCloseHandler(func(code int, text string) error {
+		h.logger.WithFields(logrus.Fields{
+			"pod":       podName,
+			"namespace": namespace,
+			"code":      code,
+			"reason":    text,
+		}).Info("WebSocket close handler triggered, canceling exec stream")
+		cancel()
+		return nil
+	})
+
+	// Get pod to find container name if not provided
+	h.logger.WithFields(logrus.Fields{
+		"pod":       podName,
+		"namespace": namespace,
+	}).Info("Fetching pod information")
+	
+	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get pod")
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Pod not found"))
+		return
+	}
+
+	h.logger.WithFields(logrus.Fields{
+		"pod":       podName,
+		"namespace": namespace,
+		"phase":     pod.Status.Phase,
+	}).Info("Pod found, checking status")
+
+	// Check if pod is running
+	if pod.Status.Phase != v1.PodRunning {
+		h.logger.WithField("phase", pod.Status.Phase).Error("Pod is not running")
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, fmt.Sprintf("Pod is not running (phase: %s)", pod.Status.Phase)))
+		return
+	}
+
+	// Use first container if not specified
+	if containerName == "" && len(pod.Spec.Containers) > 0 {
+		containerName = pod.Spec.Containers[0].Name
+	}
+
+	if containerName == "" {
+		h.logger.Error("No container found in pod")
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "No containers found in pod"))
+		return
+	}
+
+	// Check container image to provide better error messages
+	var containerImage string
+	for _, container := range pod.Spec.Containers {
+		if container.Name == containerName {
+			containerImage = container.Image
+			break
+		}
+	}
+	h.logger.WithFields(logrus.Fields{
+		"pod":       podName,
+		"namespace": namespace,
+		"container": containerName,
+		"image":     containerImage,
+	}).Info("Container image info")
+
+	h.logger.WithFields(logrus.Fields{
+		"pod":       podName,
+		"namespace": namespace,
+		"container": containerName,
+	}).Info("Starting exec session")
+
+	// Stream exec - reuse terminal executor but with different namespace
+	executor := terminal.NewExecutor(h.podManager.GetClient(), h.podManager.GetConfig(), namespace)
+	if err := executor.StreamTerminal(ctx, ws, podName, containerName); err != nil {
+		h.logger.WithError(err).WithFields(logrus.Fields{
+			"pod":       podName,
+			"namespace": namespace,
+			"container": containerName,
+		}).Error("Exec stream error")
+		
+		// Provide user-friendly error messages
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "no such file or directory") || strings.Contains(errMsg, "exec:") {
+			errMsg = fmt.Sprintf("Container does not have a shell available.\n"+
+				"This is common with distroless or minimal container images.\n"+
+				"Container image: %s\n"+
+				"Original error: %s", containerImage, err.Error())
+		}
+		
+		// Try to send error message to client before closing
+		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mExec error: %s\x1b[0m\r\n", errMsg)))
+	} else {
+		h.logger.WithFields(logrus.Fields{
+			"pod":       podName,
+			"namespace": namespace,
+			"container": containerName,
+		}).Info("Exec stream completed successfully")
+	}
 }
 
 // getRestartCount returns the total restart count for all containers in a pod.

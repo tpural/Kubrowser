@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -53,76 +54,90 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 		return nil
 	})
 
-	// Create exec request
-	// Start bash with custom prompt
-	// The "I have no name!" message comes from bash checking /etc/passwd
-	// We'll create a minimal bashrc file to override the prompt
-	req := e.client.CoreV1().RESTClient().Post().
-		Resource("pods").
-		Name(podName).
-		Namespace(e.namespace).
-		SubResource("exec").
-		VersionedParams(&v1.PodExecOptions{
-			Container: containerName,
-			Command: []string{
-				"/bin/sh",
-				"-c",
-				"export USER=kubrowser HOME=/home/kubrowser && printf 'export PS1=\"kubrowser:\\w\\$ \"\n' > /tmp/.bashrc_kubrowser && exec /bin/bash --rcfile /tmp/.bashrc_kubrowser -i",
-			},
-			Stdin:     true,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       true,
-		}, scheme.ParameterCodec)
-
-	executor, err := remotecommand.NewSPDYExecutor(e.config, "POST", req.URL())
-	if err != nil {
-		return err
+	// Try multiple shell paths in order of likelihood
+	// This handles different container types:
+	// - Standard containers: /bin/sh or sh
+	// - Alpine: /bin/sh or /usr/bin/sh
+	// - Debian/Ubuntu: /bin/bash or /bin/sh
+	// - Distroless: may have sh in PATH
+	shellPaths := []string{
+		"sh",           // Try PATH first (works for most)
+		"/bin/sh",      // Most common location
+		"/bin/bash",    // Bash-based images
+		"/usr/bin/sh",  // Some Alpine variants
+		"/usr/bin/bash", // Some distributions
 	}
 
-	// Create streams
-	stdin := &stdinStream{ws: ws, sessionSent: false, buffer: nil, ctx: ctx}
-	stdout := &stdoutStream{ws: ws}
-	stderr := stdout
+	var lastErr error
+	for _, shellPath := range shellPaths {
+		// Create exec request with current shell path
+		req := e.client.CoreV1().RESTClient().Post().
+			Resource("pods").
+			Name(podName).
+			Namespace(e.namespace).
+			SubResource("exec").
+			VersionedParams(&v1.PodExecOptions{
+				Container: containerName,
+				Command:   []string{shellPath, "-i"},
+				Stdin:     true,
+				Stdout:    true,
+				Stderr:    true,
+				TTY:       true,
+			}, scheme.ParameterCodec)
 
-	// Start ping goroutine
-	go e.pingTicker(ws)
+		executor, err := remotecommand.NewSPDYExecutor(e.config, "POST", req.URL())
+		if err != nil {
+			lastErr = fmt.Errorf("failed to create SPDY executor: %w", err)
+			continue
+		}
 
-	// Execute - this will block until the stream ends
-	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdin:  stdin,
-		Stdout: stdout,
-		Stderr: stderr,
-		Tty:    true,
-	})
-	
-	// Log when exec stream ends
-	if err != nil {
-		// Log the error type for debugging
-		if err == context.Canceled {
-			// Context was canceled, this is expected when WebSocket closes
-		} else if err == io.EOF {
-			// EOF is expected when connection closes
-		}
-	}
-	
-	// Handle common errors gracefully
-	if err != nil {
-		// Exit code 137 = SIGKILL (process killed) - this is often normal when connection closes
-		if err.Error() == "command terminated with exit code 137" {
-			return io.EOF // Treat as normal EOF
-		}
-		// Don't wrap context errors
-		if err == context.Canceled || err == context.DeadlineExceeded {
+		// Create streams
+		stdin := &stdinStream{ws: ws, sessionSent: false, buffer: nil, ctx: ctx}
+		stdout := &stdoutStream{ws: ws}
+		stderr := stdout
+
+		// Start ping goroutine
+		go e.pingTicker(ws)
+
+		// Execute - this will block until the stream ends
+		// Use a goroutine to detect if it hangs
+		execDone := make(chan error, 1)
+		go func() {
+			execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+				Stdin:  stdin,
+				Stdout: stdout,
+				Stderr: stderr,
+				Tty:    true,
+			})
+		}()
+
+		// Wait for exec to complete or context to be canceled
+		select {
+		case err = <-execDone:
+			// Check if this is a "shell not found" error
+			if err != nil && (strings.Contains(err.Error(), "no such file") || 
+				strings.Contains(err.Error(), "exec:") ||
+				strings.Contains(err.Error(), "stat /")) {
+				// This shell path doesn't exist, try the next one
+				lastErr = err
+				continue
+			}
+			// Either success or a different error - return it
 			return err
+		case <-ctx.Done():
+			// Context was canceled (client disconnected)
+			return ctx.Err()
 		}
-		if err == io.EOF {
-			return err
-		}
-		return fmt.Errorf("exec stream error: %w", err)
 	}
-	
-	return nil
+
+	// If we get here, all shell paths failed
+	if lastErr != nil {
+		return fmt.Errorf("no shell found in container (tried: %v). %w\n\n"+
+			"Note: Distroless/minimal containers may not have a shell.\n"+
+			"Consider using 'kubectl debug' with an ephemeral container (Kubernetes 1.23+)",
+			shellPaths, lastErr)
+	}
+	return fmt.Errorf("no shell found in container (tried: %v)", shellPaths)
 }
 
 // pingTicker sends ping messages to keep the connection alive.
@@ -168,9 +183,9 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 		default:
 		}
 
-		// Set read deadline to detect closed connections quickly
-		// Use a shorter deadline so we detect browser closes faster
-		s.ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+		// Set a longer read deadline - we want to wait for input, not timeout quickly
+		// The executor will call Read() when it needs input, so we should wait
+		s.ws.SetReadDeadline(time.Now().Add(pongWait))
 		
 		messageType, message, err := s.ws.ReadMessage()
 		if err != nil {
@@ -186,22 +201,36 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				return 0, io.EOF
 			}
-			// For timeout errors, continue loop to check context
+			// For timeout errors, check context and continue if not canceled
 			if websocket.IsUnexpectedCloseError(err) {
-				// Reset deadline and continue
-				s.ws.SetReadDeadline(time.Time{})
-				continue
+				// Check context before continuing
+				select {
+				case <-s.ctx.Done():
+					return 0, io.EOF
+				default:
+					// Reset deadline and continue waiting
+					s.ws.SetReadDeadline(time.Time{})
+					continue
+				}
 			}
 			// For other errors, check if it's a network/connection error
 			if err == io.EOF || err.Error() == "use of closed network connection" {
 				return 0, io.EOF
 			}
-			// For timeout, continue to check context
+			// For timeout, check context and continue if not canceled
 			if err.Error() == "i/o timeout" {
-				continue
+				select {
+				case <-s.ctx.Done():
+					return 0, io.EOF
+				default:
+					continue
+				}
 			}
 			return 0, err
 		}
+		
+		// Reset deadline after successful read
+		s.ws.SetReadDeadline(time.Time{})
 		
 		// Skip the first text message if it looks like session info JSON
 		if messageType == websocket.TextMessage && !s.sessionSent {
