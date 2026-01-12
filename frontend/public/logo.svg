@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512" height="512"
+     viewBox="130 90 250 330"
+     role="img"
+     aria-label="Secure shell icon">
+
+  <title>Secure Shell</title>
+
+  <defs>
+    <style>
+      .stroke {
+        stroke: #326CE5;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+    </style>
+  </defs>
+
+  <!-- Lock shackle (slightly heavier for emphasis) -->
+  <path d="M176 220
+           v-36
+           a80 80 0 0 1 160 0
+           v36"
+        class="stroke"
+        stroke-width="16"/>
+
+  <!-- Lock body -->
+  <rect x="152" y="220"
+        width="208" height="192"
+        rx="32"
+        class="stroke"
+        stroke-width="14"/>
+
+  <!-- Lock body inner panel (subtle detail) -->
+  <rect x="176" y="248"
+        width="160" height="136"
+        rx="20"
+        class="stroke"
+        stroke-width="8"
+        opacity="0.6"/>
+
+  <!-- Shell chevron (slightly bolder than body) -->
+  <path d="M244 300 L272 320 L244 340"
+        class="stroke"
+        stroke-width="16"/>
+</svg>
