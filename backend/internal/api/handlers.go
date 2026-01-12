@@ -14,6 +14,7 @@ import (
 	"github.com/kubrowser/kubrowser-backend/internal/terminal"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -391,6 +392,128 @@ func (h *Handlers) HandleListNamespaces(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"namespaces": namespaceList})
+}
+
+// HandleListPods lists pods in a namespace or all namespaces.
+func (h *Handlers) HandleListPods(c *gin.Context) {
+	namespace := c.DefaultQuery("namespace", "default")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	// Use metav1.NamespaceAll to list pods from all namespaces
+	// Handle both "*" and URL-encoded "%2A"
+	listNamespace := namespace
+	if namespace == "*" || namespace == "%2A" || namespace == "all" || namespace == "" {
+		listNamespace = metav1.NamespaceAll
+		h.logger.WithField("requested_namespace", namespace).Info("Listing pods from all namespaces")
+	} else {
+		h.logger.WithField("namespace", namespace).Info("Listing pods from namespace")
+	}
+
+	pods, err := h.podManager.GetClient().CoreV1().Pods(listNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		h.logger.WithError(err).WithField("namespace", namespace).Error("Failed to list pods")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list pods"})
+		return
+	}
+
+	h.logger.WithFields(logrus.Fields{
+		"namespace":        namespace,
+		"list_namespace":    listNamespace,
+		"pods_count":       len(pods.Items),
+	}).Info("Successfully listed pods")
+
+	podList := make([]gin.H, 0, len(pods.Items))
+	for _, pod := range pods.Items {
+		// Get pod status
+		status := string(pod.Status.Phase)
+		ready := false
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+
+		podList = append(podList, gin.H{
+			"name":      pod.Name,
+			"namespace": pod.Namespace,
+			"status":    status,
+			"ready":     ready,
+			"age":       time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
+			"restarts":  getRestartCount(&pod),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"pods": podList})
+}
+
+// HandleGetPod gets a specific pod by name.
+func (h *Handlers) HandleGetPod(c *gin.Context) {
+	namespace := c.DefaultQuery("namespace", "default")
+	podName := c.Param("name")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
+			return
+		}
+		h.logger.WithError(err).Error("Failed to get pod")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get pod"})
+		return
+	}
+
+	ready := false
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
+			ready = true
+			break
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"name":      pod.Name,
+		"namespace": pod.Namespace,
+		"status":    string(pod.Status.Phase),
+		"ready":     ready,
+		"age":       time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
+		"restarts":  getRestartCount(pod),
+		"labels":    pod.Labels,
+		"node":      pod.Spec.NodeName,
+	})
+}
+
+// HandleDeletePod deletes a pod by name.
+func (h *Handlers) HandleDeletePod(c *gin.Context) {
+	namespace := c.DefaultQuery("namespace", "default")
+	podName := c.Param("name")
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+
+	err := h.podManager.GetClient().CoreV1().Pods(namespace).Delete(ctx, podName, metav1.DeleteOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
+			return
+		}
+		h.logger.WithError(err).Error("Failed to delete pod")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted", "pod": podName})
+}
+
+// getRestartCount returns the total restart count for all containers in a pod.
+func getRestartCount(pod *v1.Pod) int32 {
+	var totalRestarts int32
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		totalRestarts += containerStatus.RestartCount
+	}
+	return totalRestarts
 }
 
 func generateSessionID() string {

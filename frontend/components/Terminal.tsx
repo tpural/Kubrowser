@@ -11,6 +11,8 @@ interface TerminalProps {
   onDisconnect?: () => void;
   onError?: (error: string) => void;
   shouldDisconnect?: boolean;
+  onCommandDetected?: (command: string, namespace?: string) => void;
+  onCommandClose?: () => void;
 }
 
 export function Terminal({
@@ -19,6 +21,8 @@ export function Terminal({
   onDisconnect,
   onError,
   shouldDisconnect = false,
+  onCommandDetected,
+  onCommandClose,
 }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
@@ -26,6 +30,8 @@ export function Terminal({
   const wsRef = useRef<WebSocket | null>(null);
   const connectingRef = useRef(false);
   const initializedRef = useRef(false);
+  const commandBufferRef = useRef<string[]>([]);
+  const lastDetectedCommandRef = useRef<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
     sessionId || null
   );
@@ -238,18 +244,156 @@ export function Terminal({
         // Terminal data
         if (xtermRef.current) {
           setIsLoading(false);
+          let outputText = "";
+          
           if (typeof event.data === "string") {
+            outputText = event.data;
             xtermRef.current.write(event.data);
           } else if (event.data instanceof ArrayBuffer) {
             xtermRef.current.write(new Uint8Array(event.data));
+            // Try to decode as text for command detection
+            try {
+              outputText = new TextDecoder().decode(event.data);
+            } catch {
+              // Ignore decode errors
+            }
           } else if (event.data instanceof Blob) {
             const reader = new FileReader();
             reader.onload = () => {
               if (xtermRef.current && reader.result instanceof ArrayBuffer) {
                 xtermRef.current.write(new Uint8Array(reader.result));
+                // Try to decode as text for command detection
+                try {
+                  const text = new TextDecoder().decode(reader.result);
+                  // Check for kubectl get pods output pattern
+                  if (onCommandDetected && text.includes("NAME") && text.includes("READY") && text.includes("STATUS")) {
+                    const podTablePattern = /NAME\s+READY\s+STATUS\s+RESTARTS\s+AGE/i;
+                    if (podTablePattern.test(text)) {
+                      // Extract namespace from recent commands if available
+                      // Only trigger if a specific namespace is targeted
+                      // Look through recent commands (most recent first) to find kubectl get pods command
+                      let namespace: string | undefined;
+                      for (let i = commandBufferRef.current.length - 1; i >= 0; i--) {
+                        const cmd = commandBufferRef.current[i];
+                        if (cmd && /kubectl\s+get\s+(?:po|pod|pods)/i.test(cmd)) {
+                          // Try -n flag (most common)
+                          const nMatch = cmd.match(/-n\s+([^\s]+)/i);
+                          if (nMatch && nMatch[1]) {
+                            namespace = nMatch[1].trim();
+                            console.log("[Terminal] Output detection - extracted namespace from -n:", namespace);
+                            break;
+                          }
+                          // Try --namespace=value
+                          const namespaceEqMatch = cmd.match(/--namespace\s*=\s*([^\s]+)/i);
+                          if (namespaceEqMatch && namespaceEqMatch[1]) {
+                            namespace = namespaceEqMatch[1].trim();
+                            console.log("[Terminal] Output detection - extracted namespace from --namespace=:", namespace);
+                            break;
+                          }
+                          // Try --namespace value
+                          const namespaceSpaceMatch = cmd.match(/--namespace\s+([^\s]+)/i);
+                          if (namespaceSpaceMatch && namespaceSpaceMatch[1]) {
+                            namespace = namespaceSpaceMatch[1].trim();
+                            console.log("[Terminal] Output detection - extracted namespace from --namespace:", namespace);
+                            break;
+                          }
+                        }
+                      }
+                      
+                      // Only trigger if a specific namespace was found
+                      if (namespace) {
+                        const commandKey = `kubectl-get-pods-${namespace}`;
+                        console.log("[Terminal] Output detected - Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
+                        // Always trigger if namespace changed
+                        if (lastDetectedCommandRef.current !== commandKey) {
+                          console.log("[Terminal] Triggering from output - namespace:", namespace);
+                          lastDetectedCommandRef.current = commandKey;
+                          setTimeout(() => {
+                            if (lastDetectedCommandRef.current === commandKey) {
+                              lastDetectedCommandRef.current = null;
+                            }
+                          }, detectionCooldown);
+                          onCommandDetected("kubectl get pods", namespace);
+                        } else {
+                          console.log("[Terminal] Skipping output detection - same command (cooldown)");
+                        }
+                      } else {
+                        // Output detected but no namespace - close popout
+                        console.log("[Terminal] Output detection - no specific namespace found, closing popout");
+                        if (onCommandClose) {
+                          onCommandClose();
+                        }
+                      }
+                    }
+                  }
+                } catch {
+                  // Ignore decode errors
+                }
               }
             };
             reader.readAsArrayBuffer(event.data);
+          }
+          
+          // Check output text for kubectl get pods table pattern
+          if (onCommandDetected && outputText && typeof outputText === "string") {
+            const podTablePattern = /NAME\s+READY\s+STATUS\s+RESTARTS\s+AGE/i;
+            if (podTablePattern.test(outputText)) {
+              // Extract namespace from recent commands if available
+              // Only trigger if a specific namespace is targeted
+              // Look through recent commands (most recent first) to find kubectl get pods command
+              let namespace: string | undefined;
+              for (let i = commandBufferRef.current.length - 1; i >= 0; i--) {
+                const cmd = commandBufferRef.current[i];
+                if (cmd && /kubectl\s+get\s+(?:po|pod|pods)/i.test(cmd)) {
+                  // Try -n flag (most common)
+                  const nMatch = cmd.match(/-n\s+([^\s]+)/i);
+                  if (nMatch && nMatch[1]) {
+                    namespace = nMatch[1].trim();
+                    console.log("[Terminal] Output text detection - extracted namespace from -n:", namespace);
+                    break;
+                  }
+                  // Try --namespace=value
+                  const namespaceEqMatch = cmd.match(/--namespace\s*=\s*([^\s]+)/i);
+                  if (namespaceEqMatch && namespaceEqMatch[1]) {
+                    namespace = namespaceEqMatch[1].trim();
+                    console.log("[Terminal] Output text detection - extracted namespace from --namespace=:", namespace);
+                    break;
+                  }
+                  // Try --namespace value
+                  const namespaceSpaceMatch = cmd.match(/--namespace\s+([^\s]+)/i);
+                  if (namespaceSpaceMatch && namespaceSpaceMatch[1]) {
+                    namespace = namespaceSpaceMatch[1].trim();
+                    console.log("[Terminal] Output text detection - extracted namespace from --namespace:", namespace);
+                    break;
+                  }
+                }
+              }
+              
+              // Only trigger if a specific namespace was found
+              if (namespace) {
+                const commandKey = `kubectl-get-pods-${namespace}`;
+                console.log("[Terminal] Output text detected - Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
+                // Always trigger if namespace changed
+                if (lastDetectedCommandRef.current !== commandKey) {
+                  console.log("[Terminal] Triggering from output text - namespace:", namespace);
+                  lastDetectedCommandRef.current = commandKey;
+                  setTimeout(() => {
+                    if (lastDetectedCommandRef.current === commandKey) {
+                      lastDetectedCommandRef.current = null;
+                    }
+                  }, detectionCooldown);
+                  onCommandDetected("kubectl get pods", namespace);
+                } else {
+                  console.log("[Terminal] Skipping output text detection - same command (cooldown)");
+                }
+              } else {
+                // Output detected but no namespace - close popout
+                console.log("[Terminal] Output text detection - no specific namespace found, closing popout");
+                if (onCommandClose) {
+                  onCommandClose();
+                }
+              }
+            }
           }
         }
       };
@@ -320,11 +464,99 @@ export function Terminal({
         }
       };
 
-      // Send input to WebSocket
+      // Track current line for command detection
+      let currentLine = "";
+      const maxBufferSize = 10; // Keep last 10 lines
+      const detectionCooldown = 2000; // 2 seconds cooldown between detections
+
+      // Send input to WebSocket and detect commands
       xterm.onData((data) => {
         // Don't send data if disconnected
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           ws.send(data);
+        }
+
+        // Track input for command detection
+        if (data === "\r" || data === "\n") {
+          // Enter pressed - check if it's a kubectl command
+          const line = currentLine.trim();
+          if (line) {
+            commandBufferRef.current.push(line);
+            if (commandBufferRef.current.length > maxBufferSize) {
+              commandBufferRef.current.shift();
+            }
+            
+            // Check if it's a kubectl get pods command with namespace
+            const kubectlGetPodsMatch = line.match(/kubectl\s+get\s+(?:po|pod|pods)(?:\s+.*)?$/i);
+            if (kubectlGetPodsMatch && onCommandDetected) {
+              // Only trigger if a specific namespace is targeted (not -A or default)
+              // Extract namespace if present - try multiple patterns
+              let namespace: string | undefined;
+              
+              // Try -n flag (most common) - match -n followed by whitespace and capture the namespace
+              const nMatch = line.match(/-n\s+([^\s]+)/i);
+              if (nMatch && nMatch[1]) {
+                namespace = nMatch[1].trim();
+                console.log("[Terminal] Extracted namespace from -n flag:", namespace);
+              } else {
+                // Try --namespace=value
+                const namespaceEqMatch = line.match(/--namespace\s*=\s*([^\s]+)/i);
+                if (namespaceEqMatch && namespaceEqMatch[1]) {
+                  namespace = namespaceEqMatch[1].trim();
+                  console.log("[Terminal] Extracted namespace from --namespace=:", namespace);
+                } else {
+                  // Try --namespace value
+                  const namespaceSpaceMatch = line.match(/--namespace\s+([^\s]+)/i);
+                  if (namespaceSpaceMatch && namespaceSpaceMatch[1]) {
+                    namespace = namespaceSpaceMatch[1].trim();
+                    console.log("[Terminal] Extracted namespace from --namespace:", namespace);
+                  }
+                }
+              }
+              
+              // Only trigger if a specific namespace was found (ignore -A and default)
+              if (namespace) {
+                const commandKey = `kubectl-get-pods-${namespace}`;
+                console.log("[Terminal] Command detected with namespace:", line, "Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
+                // Always trigger if namespace changed
+                const isDifferentNamespace = lastDetectedCommandRef.current !== commandKey;
+                if (isDifferentNamespace) {
+                  console.log("[Terminal] Triggering command detection - namespace:", namespace);
+                  lastDetectedCommandRef.current = commandKey;
+                  setTimeout(() => {
+                    if (lastDetectedCommandRef.current === commandKey) {
+                      lastDetectedCommandRef.current = null;
+                    }
+                  }, detectionCooldown);
+                  onCommandDetected("kubectl get pods", namespace);
+                } else {
+                  console.log("[Terminal] Skipping - same command detected (cooldown)");
+                }
+              } else {
+                // kubectl get pods without namespace flag - close popout
+                console.log("[Terminal] kubectl get pods without namespace flag - closing popout");
+                if (onCommandClose) {
+                  onCommandClose();
+                }
+              }
+            } else {
+              // Any other command (not kubectl get pods with namespace) - close popout
+              console.log("[Terminal] Other command detected:", line, "- closing popout");
+              if (onCommandClose) {
+                onCommandClose();
+              }
+            }
+          }
+          currentLine = "";
+        } else if (data.length === 1 && data >= " " && data <= "~") {
+          // Printable character
+          currentLine += data;
+        } else if (data === "\x7f" || data === "\b") {
+          // Backspace
+          currentLine = currentLine.slice(0, -1);
+        } else if (data === "\x1b[K" || data === "\x03") {
+          // Clear line or Ctrl+C
+          currentLine = "";
         }
       });
 
