@@ -43,10 +43,11 @@ export default function Home() {
   };
 
   const handleCommandDetected = (command: string, namespace?: string) => {
-    if (command === "kubectl get pods" && namespace) {
-      // Only trigger if a specific namespace is provided (not -A or default)
-      console.log("Command detected:", command, "Namespace:", namespace);
-      setPodListNamespace(namespace);
+    if (command === "kubectl get pods") {
+      // Use provided namespace or default to "default"
+      const detectedNamespace = namespace || "default";
+      console.log("Command detected:", command, "Namespace:", detectedNamespace);
+      setPodListNamespace(detectedNamespace);
       setShowPodList(true);
     }
   };

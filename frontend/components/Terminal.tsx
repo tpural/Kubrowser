@@ -270,12 +270,21 @@ export function Terminal({
                     const podTablePattern = /NAME\s+READY\s+STATUS\s+RESTARTS\s+AGE/i;
                     if (podTablePattern.test(text)) {
                       // Extract namespace from recent commands if available
-                      // Only trigger if a specific namespace is targeted
                       // Look through recent commands (most recent first) to find kubectl get pods command
                       let namespace: string | undefined;
                       for (let i = commandBufferRef.current.length - 1; i >= 0; i--) {
                         const cmd = commandBufferRef.current[i];
                         if (cmd && /kubectl\s+get\s+(?:po|pod|pods)/i.test(cmd)) {
+                          // Check for -A or --all-namespaces flag first (don't trigger for these)
+                          const allNamespacesMatch = cmd.match(/(?:^|\s)-A(?:\s|$)|--all-namespaces/i);
+                          if (allNamespacesMatch) {
+                            console.log("[Terminal] Output detection - found -A flag, closing popout");
+                            if (onCommandClose) {
+                              onCommandClose();
+                            }
+                            return;
+                          }
+                          
                           // Try -n flag (most common)
                           const nMatch = cmd.match(/-n\s+([^\s]+)/i);
                           if (nMatch && nMatch[1]) {
@@ -297,10 +306,14 @@ export function Terminal({
                             console.log("[Terminal] Output detection - extracted namespace from --namespace:", namespace);
                             break;
                           }
+                          // No namespace flag found - default to "default"
+                          namespace = "default";
+                          console.log("[Terminal] Output detection - no namespace flag found, using default");
+                          break;
                         }
                       }
                       
-                      // Only trigger if a specific namespace was found
+                      // Trigger with the namespace (either extracted or "default")
                       if (namespace) {
                         const commandKey = `kubectl-get-pods-${namespace}`;
                         console.log("[Terminal] Output detected - Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
@@ -316,12 +329,6 @@ export function Terminal({
                           onCommandDetected("kubectl get pods", namespace);
                         } else {
                           console.log("[Terminal] Skipping output detection - same command (cooldown)");
-                        }
-                      } else {
-                        // Output detected but no namespace - close popout
-                        console.log("[Terminal] Output detection - no specific namespace found, closing popout");
-                        if (onCommandClose) {
-                          onCommandClose();
                         }
                       }
                     }
@@ -339,12 +346,21 @@ export function Terminal({
             const podTablePattern = /NAME\s+READY\s+STATUS\s+RESTARTS\s+AGE/i;
             if (podTablePattern.test(outputText)) {
               // Extract namespace from recent commands if available
-              // Only trigger if a specific namespace is targeted
               // Look through recent commands (most recent first) to find kubectl get pods command
               let namespace: string | undefined;
               for (let i = commandBufferRef.current.length - 1; i >= 0; i--) {
                 const cmd = commandBufferRef.current[i];
                 if (cmd && /kubectl\s+get\s+(?:po|pod|pods)/i.test(cmd)) {
+                  // Check for -A or --all-namespaces flag first (don't trigger for these)
+                  const allNamespacesMatch = cmd.match(/(?:^|\s)-A(?:\s|$)|--all-namespaces/i);
+                  if (allNamespacesMatch) {
+                    console.log("[Terminal] Output text detection - found -A flag, closing popout");
+                    if (onCommandClose) {
+                      onCommandClose();
+                    }
+                    return;
+                  }
+                  
                   // Try -n flag (most common)
                   const nMatch = cmd.match(/-n\s+([^\s]+)/i);
                   if (nMatch && nMatch[1]) {
@@ -366,10 +382,14 @@ export function Terminal({
                     console.log("[Terminal] Output text detection - extracted namespace from --namespace:", namespace);
                     break;
                   }
+                  // No namespace flag found - default to "default"
+                  namespace = "default";
+                  console.log("[Terminal] Output text detection - no namespace flag found, using default");
+                  break;
                 }
               }
               
-              // Only trigger if a specific namespace was found
+              // Trigger with the namespace (either extracted or "default")
               if (namespace) {
                 const commandKey = `kubectl-get-pods-${namespace}`;
                 console.log("[Terminal] Output text detected - Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
@@ -385,12 +405,6 @@ export function Terminal({
                   onCommandDetected("kubectl get pods", namespace);
                 } else {
                   console.log("[Terminal] Skipping output text detection - same command (cooldown)");
-                }
-              } else {
-                // Output detected but no namespace - close popout
-                console.log("[Terminal] Output text detection - no specific namespace found, closing popout");
-                if (onCommandClose) {
-                  onCommandClose();
                 }
               }
             }
@@ -486,10 +500,20 @@ export function Terminal({
               commandBufferRef.current.shift();
             }
             
-            // Check if it's a kubectl get pods command with namespace
+            // Check if it's a kubectl get pods command
             const kubectlGetPodsMatch = line.match(/kubectl\s+get\s+(?:po|pod|pods)(?:\s+.*)?$/i);
             if (kubectlGetPodsMatch && onCommandDetected) {
-              // Only trigger if a specific namespace is targeted (not -A or default)
+              // Check for -A or --all-namespaces flag first (don't trigger for these)
+              const allNamespacesMatch = line.match(/(?:^|\s)-A(?:\s|$)|--all-namespaces/i);
+              if (allNamespacesMatch) {
+                console.log("[Terminal] Detected -A or --all-namespaces - closing popout");
+                if (onCommandClose) {
+                  onCommandClose();
+                }
+                currentLine = "";
+                return;
+              }
+              
               // Extract namespace if present - try multiple patterns
               let namespace: string | undefined;
               
@@ -510,37 +534,33 @@ export function Terminal({
                   if (namespaceSpaceMatch && namespaceSpaceMatch[1]) {
                     namespace = namespaceSpaceMatch[1].trim();
                     console.log("[Terminal] Extracted namespace from --namespace:", namespace);
+                  } else {
+                    // No namespace flag found - default to "default" namespace
+                    namespace = "default";
+                    console.log("[Terminal] No namespace flag found, using default namespace");
                   }
                 }
               }
               
-              // Only trigger if a specific namespace was found (ignore -A and default)
-              if (namespace) {
-                const commandKey = `kubectl-get-pods-${namespace}`;
-                console.log("[Terminal] Command detected with namespace:", line, "Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
-                // Always trigger if namespace changed
-                const isDifferentNamespace = lastDetectedCommandRef.current !== commandKey;
-                if (isDifferentNamespace) {
-                  console.log("[Terminal] Triggering command detection - namespace:", namespace);
-                  lastDetectedCommandRef.current = commandKey;
-                  setTimeout(() => {
-                    if (lastDetectedCommandRef.current === commandKey) {
-                      lastDetectedCommandRef.current = null;
-                    }
-                  }, detectionCooldown);
-                  onCommandDetected("kubectl get pods", namespace);
-                } else {
-                  console.log("[Terminal] Skipping - same command detected (cooldown)");
-                }
+              // Trigger with the namespace (either extracted or "default")
+              const commandKey = `kubectl-get-pods-${namespace}`;
+              console.log("[Terminal] Command detected:", line, "Namespace:", namespace, "CommandKey:", commandKey, "LastKey:", lastDetectedCommandRef.current);
+              // Always trigger if namespace changed
+              const isDifferentNamespace = lastDetectedCommandRef.current !== commandKey;
+              if (isDifferentNamespace) {
+                console.log("[Terminal] Triggering command detection - namespace:", namespace);
+                lastDetectedCommandRef.current = commandKey;
+                setTimeout(() => {
+                  if (lastDetectedCommandRef.current === commandKey) {
+                    lastDetectedCommandRef.current = null;
+                  }
+                }, detectionCooldown);
+                onCommandDetected("kubectl get pods", namespace);
               } else {
-                // kubectl get pods without namespace flag - close popout
-                console.log("[Terminal] kubectl get pods without namespace flag - closing popout");
-                if (onCommandClose) {
-                  onCommandClose();
-                }
+                console.log("[Terminal] Skipping - same command detected (cooldown)");
               }
             } else {
-              // Any other command (not kubectl get pods with namespace) - close popout
+              // Any other command (not kubectl get pods) - close popout
               console.log("[Terminal] Other command detected:", line, "- closing popout");
               if (onCommandClose) {
                 onCommandClose();
