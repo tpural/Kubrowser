@@ -14,6 +14,7 @@ import (
 	"github.com/kubrowser/kubrowser-backend/internal/terminal"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var upgrader = websocket.Upgrader{
@@ -333,6 +334,29 @@ func (h *Handlers) HandleDeleteSession(c *gin.Context) {
 
 	h.sessionMgr.DeleteSession(sessionID)
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// HandleListNamespaces lists all available Kubernetes namespaces.
+func (h *Handlers) HandleListNamespaces(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	namespaces, err := h.podManager.GetClient().CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to list namespaces")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list namespaces"})
+		return
+	}
+
+	namespaceList := make([]gin.H, 0, len(namespaces.Items))
+	for _, ns := range namespaces.Items {
+		namespaceList = append(namespaceList, gin.H{
+			"name":   ns.Name,
+			"status": ns.Status.Phase,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"namespaces": namespaceList})
 }
 
 func generateSessionID() string {

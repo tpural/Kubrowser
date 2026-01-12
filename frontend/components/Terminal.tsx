@@ -254,22 +254,66 @@ export function Terminal({
         }
       };
 
-      ws.onerror = (error) => {
-        connectingRef.current = false;
-        setIsConnecting(false);
-        setIsLoading(false);
-        console.error("WebSocket error:", error);
-        if (onError) {
-          onError("Connection error occurred");
+      ws.onerror = () => {
+        // WebSocket error event doesn't provide detailed error info
+        // Log for debugging only (less noisy than console.error)
+        // Actual error details will be in onclose handler
+        if (process.env.NODE_ENV === "development") {
+          const readyStateText = ws.readyState === WebSocket.CONNECTING ? "CONNECTING" : 
+                                ws.readyState === WebSocket.OPEN ? "OPEN" :
+                                ws.readyState === WebSocket.CLOSING ? "CLOSING" :
+                                ws.readyState === WebSocket.CLOSED ? "CLOSED" : "UNKNOWN";
+          console.warn(
+            `[WebSocket] Connection error. URL: ${wsUrl}, State: ${readyStateText} (${ws.readyState})`
+          );
         }
+        // Don't call onError here - wait for onclose which has actual error details
       };
 
       ws.onclose = (event) => {
         connectingRef.current = false;
         setIsConnecting(false);
         setIsLoading(false);
-        // Don't trigger disconnect on normal closure or if we're reconnecting
+        
+        // Log connection closure details (only in development)
+        if (process.env.NODE_ENV === "development") {
+          console.log("[WebSocket] Connection closed:", {
+            code: event.code,
+            reason: event.reason || "(no reason provided)",
+            wasClean: event.wasClean,
+            url: wsUrl,
+          });
+        }
+        
+        // Provide detailed error information based on close code
+        // Only report errors for abnormal closures (not normal shutdowns)
         if (event.code !== 1000 && event.code !== 1001) {
+          let errorMessage = "";
+          
+          switch (event.code) {
+            case 1006:
+              errorMessage = `Unable to connect to backend server at ${host}. Please ensure the backend is running (try: make dev or start the backend server on port 8080).`;
+              break;
+            case 1002:
+              errorMessage = "WebSocket protocol error occurred.";
+              break;
+            case 1003:
+              errorMessage = "Invalid data received from server.";
+              break;
+            case 1008:
+              errorMessage = `Connection rejected: ${event.reason || "Policy violation"}`;
+              break;
+            case 1011:
+              errorMessage = `Server error: ${event.reason || "Internal server error"}`;
+              break;
+            default:
+              errorMessage = `Connection closed unexpectedly (code: ${event.code})${event.reason ? `: ${event.reason}` : ""}`;
+          }
+          
+          if (errorMessage && onError) {
+            onError(errorMessage);
+          }
+          
           if (onDisconnect) {
             onDisconnect();
           }
