@@ -54,6 +54,9 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 	})
 
 	// Create exec request
+	// Start bash with custom prompt
+	// The "I have no name!" message comes from bash checking /etc/passwd
+	// We'll create a minimal bashrc file to override the prompt
 	req := e.client.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
@@ -61,7 +64,11 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 		SubResource("exec").
 		VersionedParams(&v1.PodExecOptions{
 			Container: containerName,
-			Command:   []string{"/bin/bash", "-i"},
+			Command: []string{
+				"/bin/sh",
+				"-c",
+				"export USER=kubrowser HOME=/home/kubrowser && printf 'export PS1=\"kubrowser:\\w\\$ \"\n' > /tmp/.bashrc_kubrowser && exec /bin/bash --rcfile /tmp/.bashrc_kubrowser -i",
+			},
 			Stdin:     true,
 			Stdout:    true,
 			Stderr:    true,

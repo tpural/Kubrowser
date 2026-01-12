@@ -89,14 +89,34 @@ func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod,
 			},
 		},
 		Spec: v1.PodSpec{
+			Hostname: "kubrowser",
 			ServiceAccountName: pm.serviceAccount,
 			Containers: []v1.Container{
 				{
 					Name:  "kubectl",
 					Image: pm.image,
 					// Keep container running
+					// Create a user entry in /etc/passwd to prevent "I have no name!" message
 					Command: []string{"/bin/sh", "-c"},
-					Args:    []string{"trap 'exit 0' SIGTERM; while true; do sleep 30; done"},
+					Args: []string{
+						"echo 'kubrowser:x:1000:1000:Kubrowser User:/home/kubrowser:/bin/bash' >> /etc/passwd 2>/dev/null || true; " +
+							"mkdir -p /home/kubrowser 2>/dev/null || true; " +
+							"trap 'exit 0' SIGTERM; while true; do sleep 30; done",
+					},
+					Env: []v1.EnvVar{
+						{
+							Name:  "USER",
+							Value: "kubrowser",
+						},
+						{
+							Name:  "HOME",
+							Value: "/home/kubrowser",
+						},
+						{
+							Name:  "PS1",
+							Value: "kubrowser:\\w\\$ ",
+						},
+					},
 					Resources: v1.ResourceRequirements{
 						Limits: v1.ResourceList{
 							v1.ResourceCPU:    cpuQuantity,
