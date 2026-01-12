@@ -63,9 +63,20 @@ func NewPodManager(kubeconfigPath, namespace, image, serviceAccount string, limi
 	}, nil
 }
 
+// StatusCallback is called to report pod creation status updates
+type StatusCallback func(message string)
+
+// StatusCallbackWithDuration is called to report pod creation status updates with duration
+type StatusCallbackWithDuration func(message string, duration time.Duration)
+
 // CreatePod creates a new pod with kubectl installed.
 // The pod will be automatically cleaned up after the specified timeout.
 func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod, error) {
+	return pm.CreatePodWithStatus(ctx, sessionID, time.Now(), nil)
+}
+
+// CreatePodWithStatus creates a new pod with kubectl installed and reports status updates.
+func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID string, startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
 	podName := fmt.Sprintf("kubrowser-%s-%d", sessionID, time.Now().Unix())
 
 	cpuQuantity, err := resource.ParseQuantity(pm.limits.CPU)
@@ -140,26 +151,72 @@ func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod,
 		},
 	}
 
+	if statusCallback != nil {
+		statusCallback("\r\x1b[K\x1b[33m[ ] Creating pod...\x1b[0m")
+	}
+
 	createdPod, err := pm.client.CoreV1().Pods(pm.namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
+		if statusCallback != nil {
+			statusCallback("\r\x1b[K\x1b[31m[✗] Failed to create pod\x1b[0m\r\n")
+		}
 		return nil, fmt.Errorf("failed to create pod: %w", err)
 	}
 
+	if statusCallback != nil {
+		elapsed := time.Since(startTime)
+		statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Pod created (%v)\x1b[0m\r\n", elapsed.Round(time.Millisecond)))
+		statusCallback("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready...\x1b[0m")
+	}
+
 	// Wait for pod to be ready
-	if err := pm.waitForPodReady(ctx, podName); err != nil {
+	if err := pm.waitForPodReady(ctx, podName, startTime, statusCallback); err != nil {
+		if statusCallback != nil {
+			statusCallback("\r\x1b[K\x1b[31m[✗] Pod failed to become ready\x1b[0m\r\n")
+		}
 		_ = pm.DeletePod(ctx, podName)
 		return nil, fmt.Errorf("pod failed to become ready: %w", err)
+	}
+
+	if statusCallback != nil {
+		elapsed := time.Since(startTime)
+		statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Pod is ready (%v)\x1b[0m\r\n", elapsed.Round(time.Millisecond)))
+		statusCallback("\r\x1b[K\x1b[33m[ ] Starting terminal session...\x1b[0m")
 	}
 
 	return createdPod, nil
 }
 
 // waitForPodReady waits for the pod to be in Ready state.
-func (pm *PodManager) waitForPodReady(ctx context.Context, podName string) error {
+func (pm *PodManager) waitForPodReady(ctx context.Context, podName string, startTime time.Time, statusCallback StatusCallback) error {
+	lastPhase := ""
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
 		pod, err := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
+		}
+
+		// Report phase changes - overwrite the waiting line with elapsed time
+		if statusCallback != nil {
+			elapsed := time.Since(startTime)
+			if pod.Status.Phase != v1.PodPhase(lastPhase) {
+				lastPhase = string(pod.Status.Phase)
+				// Clear line and overwrite with phase info
+				switch pod.Status.Phase {
+				case v1.PodPending:
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (Pending, %v)\x1b[0m", elapsed.Round(time.Millisecond)))
+				case v1.PodRunning:
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (Running, %v)\x1b[0m", elapsed.Round(time.Millisecond)))
+				case v1.PodSucceeded, v1.PodFailed:
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[31m[✗] Pod phase: %s (%v)\x1b[0m", pod.Status.Phase, elapsed.Round(time.Millisecond)))
+				}
+			} else {
+				// Update elapsed time periodically even if phase hasn't changed
+				switch pod.Status.Phase {
+				case v1.PodPending, v1.PodRunning:
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (%s, %v)\x1b[0m", pod.Status.Phase, elapsed.Round(time.Millisecond)))
+				}
+			}
 		}
 
 		// Check if pod is running first

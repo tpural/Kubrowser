@@ -56,6 +56,16 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 
 	var sess *session.Session
 	var exists bool
+	var ws *websocket.Conn
+	var err error
+
+	// Upgrade to WebSocket first so we can send status updates
+	ws, err = upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to upgrade to WebSocket")
+		return
+	}
+	defer ws.Close()
 
 	if sessionID != "" && reconnect {
 		sess, exists = h.sessionMgr.GetSession(sessionID)
@@ -64,30 +74,54 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 			return
 		}
 	} else {
-		// Create new session
-		pod, err := h.podManager.CreatePod(c.Request.Context(), generateSessionID())
+		// Send status checklist while creating pod
+		sendStatusUpdate := func(message string) {
+			ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			ws.WriteMessage(websocket.TextMessage, []byte(message))
+		}
+
+		// Show initial status header
+		sendStatusUpdate("\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n")
+		sendStatusUpdate("\x1b[34;1mKubrowser is starting up\x1b[0m\r\n")
+		sendStatusUpdate("\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n\r\n")
+		
+		// Track start time
+		startTime := time.Now()
+		
+		// Create new session with status updates
+		newSessionID := generateSessionID()
+		pod, err := h.podManager.CreatePodWithStatus(c.Request.Context(), newSessionID, startTime, func(status string) {
+			sendStatusUpdate(status)
+		})
 		if err != nil {
 			h.logger.WithError(err).Error("Failed to create pod")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create pod"})
+			duration := time.Since(startTime)
+			sendStatusUpdate(fmt.Sprintf("\r\n\x1b[31m[✗] Failed to create pod: %s (took %v)\x1b[0m\r\n", err.Error(), duration.Round(time.Millisecond)))
+			ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Failed to create pod"))
 			return
 		}
 
 		sess = h.sessionMgr.CreateSession(pod.Name, "anonymous") // TODO: Get from auth
 		sessionID = sess.ID
+
+		// Calculate total duration
+		duration := time.Since(startTime)
+		
+		// Mark as ready - overwrite the "Starting terminal session" line
+		sendStatusUpdate("\r\x1b[K\x1b[32m[✓] Terminal session ready\x1b[0m\r\n")
+		
+		// Separator line
+		sendStatusUpdate("\r\n\x1b[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\r\n")
+		
+		// Show summary
+		sendStatusUpdate(fmt.Sprintf("\x1b[36m✓ Ready in %v\x1b[0m\r\n", duration.Round(time.Millisecond)))
+		sendStatusUpdate(fmt.Sprintf("\x1b[90mPod: %s | Namespace: %s\x1b[0m\r\n\r\n", pod.Name, pod.Namespace))
 	}
 
 	h.logger.WithFields(logrus.Fields{
 		"session_id": sessionID,
 		"pod_name":   sess.PodName,
 	}).Info("WebSocket connection established")
-
-	// Upgrade to WebSocket first (before locking, so we can send close message)
-	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		h.logger.WithError(err).Error("Failed to upgrade to WebSocket")
-		return
-	}
-	defer ws.Close()
 
 	// Try to lock exec for this session (prevent multiple execs to same pod)
 	if !h.sessionMgr.TryLockExec(sessionID) {
