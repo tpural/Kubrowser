@@ -3,6 +3,8 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -69,15 +71,102 @@ type StatusCallback func(message string)
 // StatusCallbackWithDuration is called to report pod creation status updates with duration
 type StatusCallbackWithDuration func(message string, duration time.Duration)
 
+// sanitizeUsername sanitizes a username to be Kubernetes-compliant.
+// Kubernetes names must be lowercase alphanumeric characters, '-', or '.', and must start/end with alphanumeric.
+// Max length is 63 characters.
+func sanitizeUsername(username string) string {
+	// Default to "anonymous" if empty
+	if username == "" {
+		username = "anonymous"
+	}
+	
+	// Convert to lowercase
+	username = strings.ToLower(username)
+	
+	// Replace invalid characters with hyphens (keep alphanumeric, dots, and hyphens)
+	re := regexp.MustCompile(`[^a-z0-9.-]`)
+	username = re.ReplaceAllString(username, "-")
+	
+	// Remove leading/trailing dots and hyphens
+	username = strings.Trim(username, "-.")
+	
+	// Ensure it starts and ends with alphanumeric
+	if len(username) > 0 && !isAlphanumeric(rune(username[0])) {
+		username = "u" + username
+	}
+	if len(username) > 0 && !isAlphanumeric(rune(username[len(username)-1])) {
+		username = username + "0"
+	}
+	
+	// Truncate to 63 characters (Kubernetes limit)
+	if len(username) > 63 {
+		username = username[:63]
+		// Ensure it still ends with alphanumeric after truncation
+		if !isAlphanumeric(rune(username[len(username)-1])) {
+			username = username[:62] + "0"
+		}
+	}
+	
+	// If empty after sanitization, use default
+	if username == "" {
+		username = "anonymous"
+	}
+	
+	return username
+}
+
+func isAlphanumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
 // CreatePod creates a new pod with kubectl installed.
 // The pod will be automatically cleaned up after the specified timeout.
 func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod, error) {
-	return pm.CreatePodWithStatus(ctx, sessionID, time.Now(), nil)
+	return pm.CreatePodWithStatus(ctx, sessionID, "", time.Now(), nil)
 }
 
 // CreatePodWithStatus creates a new pod with kubectl installed and reports status updates.
-func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID string, startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
-	podName := fmt.Sprintf("kubrowser-%s-%d", sessionID, time.Now().Unix())
+// username is sanitized and included in the pod name for easier management.
+// Pod name format: kubrowser-{username}
+// Note: This creates one pod per username. If a pod already exists for this user, it will be deleted first.
+func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, username string, startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
+	// Sanitize username for Kubernetes naming requirements
+	sanitizedUsername := sanitizeUsername(username)
+	
+	// Generate pod name: kubrowser-{username}
+	podName := fmt.Sprintf("kubrowser-%s", sanitizedUsername)
+	
+	// Ensure pod name doesn't exceed 63 characters (Kubernetes limit)
+	if len(podName) > 63 {
+		// Truncate username if needed (leave room for "kubrowser-" prefix which is 10 chars)
+		maxUsernameLen := 63 - 10
+		if maxUsernameLen > 0 && len(sanitizedUsername) > maxUsernameLen {
+			sanitizedUsername = sanitizedUsername[:maxUsernameLen]
+			podName = fmt.Sprintf("kubrowser-%s", sanitizedUsername)
+		}
+	}
+	
+	// Check if a pod with this name already exists and delete it if so
+	existingPod, err := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err == nil && existingPod != nil {
+		// Pod exists, delete it first
+		if statusCallback != nil {
+			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Cleaning up existing pod for user %s...\x1b[0m", sanitizedUsername))
+		}
+		deletePolicy := metav1.DeletePropagationForeground
+		deleteErr := pm.client.CoreV1().Pods(pm.namespace).Delete(ctx, podName, metav1.DeleteOptions{
+			PropagationPolicy: &deletePolicy,
+		})
+		if deleteErr != nil && !errors.IsNotFound(deleteErr) {
+			// Log but continue - we'll try to create anyway
+			if statusCallback != nil {
+				statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[!] Warning: Failed to delete existing pod: %v\x1b[0m\r\n", deleteErr))
+			}
+		} else {
+			// Wait a moment for deletion to propagate
+			time.Sleep(1 * time.Second)
+		}
+	}
 
 	cpuQuantity, err := resource.ParseQuantity(pm.limits.CPU)
 	if err != nil {
@@ -95,8 +184,9 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID string,
 			Namespace: pm.namespace,
 			Labels: map[string]string{
 				"app":        "kubrowser",
-				"session-id":  sessionID,
-				"managed-by":  "kubrowser-backend",
+				"session-id": sessionID,
+				"username":   sanitizedUsername,
+				"managed-by": "kubrowser-backend",
 			},
 		},
 		Spec: v1.PodSpec{
@@ -263,6 +353,18 @@ func (pm *PodManager) GetPod(ctx context.Context, podName string) (*v1.Pod, erro
 func (pm *PodManager) ListPods(ctx context.Context) ([]v1.Pod, error) {
 	list, err := pm.client.CoreV1().Pods(pm.namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "app=kubrowser",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+// ListPodsByUsername lists all pods for a specific username.
+func (pm *PodManager) ListPodsByUsername(ctx context.Context, username string) ([]v1.Pod, error) {
+	sanitizedUsername := sanitizeUsername(username)
+	list, err := pm.client.CoreV1().Pods(pm.namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=kubrowser,username=%s", sanitizedUsername),
 	})
 	if err != nil {
 		return nil, err

@@ -91,9 +91,19 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 		// Track start time
 		startTime := time.Now()
 		
+		// Get username from query parameter or header (for now)
+		// TODO: Get from authentication token when auth is implemented
+		username := c.Query("username")
+		if username == "" {
+			username = c.GetHeader("X-Username")
+		}
+		if username == "" {
+			username = "anonymous"
+		}
+		
 		// Create new session with status updates
 		newSessionID := generateSessionID()
-		pod, err := h.podManager.CreatePodWithStatus(c.Request.Context(), newSessionID, startTime, func(status string) {
+		pod, err := h.podManager.CreatePodWithStatus(c.Request.Context(), newSessionID, username, startTime, func(status string) {
 			sendStatusUpdate(status)
 		})
 		if err != nil {
@@ -104,7 +114,7 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 			return
 		}
 
-		sess = h.sessionMgr.CreateSession(pod.Name, "anonymous") // TODO: Get from auth
+		sess = h.sessionMgr.CreateSession(pod.Name, username)
 		sessionID = sess.ID
 
 		// Calculate total duration
@@ -702,15 +712,12 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 		
 		// Provide user-friendly error messages
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "no such file or directory") || strings.Contains(errMsg, "exec:") {
-			errMsg = fmt.Sprintf("Container does not have a shell available.\n"+
-				"This is common with distroless or minimal container images.\n"+
-				"Container image: %s\n"+
-				"Original error: %s", containerImage, err.Error())
+		if strings.Contains(errMsg, "no such file or directory") || strings.Contains(errMsg, "exec:") || strings.Contains(errMsg, "no shell found") {
+			errMsg = fmt.Sprintf("Container has no shell (image: %s). Use 'kubectl debug' for distroless containers.", containerImage)
 		}
 		
-		// Try to send error message to client before closing
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mExec error: %s\x1b[0m\r\n", errMsg)))
+		// Send clean error message to client before closing
+		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Exec error: %s", errMsg)))
 	} else {
 		h.logger.WithFields(logrus.Fields{
 			"pod":       podName,

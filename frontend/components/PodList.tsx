@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Trash2, RefreshCw, FileText, Terminal as TerminalIcon } from "lucide-react";
+import { Loader2, Trash2, RefreshCw, FileText } from "lucide-react";
 import { PodLogs } from "./PodLogs";
-import { PodExec } from "./PodExec";
 
 interface Pod {
   name: string;
@@ -29,7 +28,6 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [logsPod, setLogsPod] = useState<{ name: string; namespace: string } | null>(null);
-  const [execPod, setExecPod] = useState<{ name: string; namespace: string } | null>(null);
 
   const getApiUrl = () => {
     if (process.env.NEXT_PUBLIC_API_URL) {
@@ -228,14 +226,6 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                       <FileText className="h-4 w-4" />
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setExecPod({ name: pod.name, namespace: pod.namespace })}
-                      title="Exec into pod"
-                    >
-                      <TerminalIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
                       variant="destructive"
                       size="sm"
                       onClick={() => handleDelete(pod.name, pod.namespace)}
@@ -262,15 +252,6 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
           podName={logsPod.name}
           namespace={logsPod.namespace}
           onClose={() => setLogsPod(null)}
-        />
-      )}
-      
-      {/* Exec Dialog */}
-      {execPod && (
-        <PodExec
-          podName={execPod.name}
-          namespace={execPod.namespace}
-          onClose={() => setExecPod(null)}
         />
       )}
     </Card>
