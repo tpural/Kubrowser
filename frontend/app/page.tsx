@@ -5,6 +5,7 @@ import { Terminal } from "@/components/Terminal";
 import { StatusBar } from "@/components/StatusBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PodList } from "@/components/PodList";
+import { NodeList } from "@/components/NodeList";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ export default function Home() {
   const [shouldDisconnect, setShouldDisconnect] = useState(false);
   const [showPodList, setShowPodList] = useState(false);
   const [podListNamespace, setPodListNamespace] = useState<string>("default");
+  const [showNodeList, setShowNodeList] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleConnect = (newSessionId: string) => {
@@ -49,12 +51,18 @@ export default function Home() {
       console.log("Command detected:", command, "Namespace:", detectedNamespace);
       setPodListNamespace(detectedNamespace);
       setShowPodList(true);
+      setShowNodeList(false); // Close node list if open
+    } else if (command === "kubectl get nodes") {
+      console.log("Command detected:", command);
+      setShowNodeList(true);
+      setShowPodList(false); // Close pod list if open
     }
   };
 
   const handleCommandClose = () => {
-    console.log("Command close detected - closing pod list");
+    console.log("Command close detected - closing popouts");
     setShowPodList(false);
+    setShowNodeList(false);
   };
 
   return (
@@ -85,7 +93,7 @@ export default function Home() {
       </header>
       <div className="flex-1 overflow-hidden p-4">
         <div className="h-full flex gap-4">
-          <Card className={`${showPodList ? "w-1/2" : "w-full"} flex flex-col shadow-lg border-2 transition-all duration-300`}>
+          <Card className={`${showPodList || showNodeList ? "w-1/2" : "w-full"} flex flex-col shadow-lg border-2 transition-all duration-300`}>
             <div className="p-3 border-b bg-muted/30">
               <StatusBar
                 connected={connected}
@@ -143,6 +151,13 @@ export default function Home() {
                   namespace={podListNamespace}
                   onClose={() => setShowPodList(false)}
                 />
+              </div>
+            </Card>
+          )}
+          {showNodeList && (
+            <Card className="w-1/2 flex flex-col shadow-lg border-2">
+              <div className="flex-1 overflow-hidden p-4">
+                <NodeList onClose={() => setShowNodeList(false)} />
               </div>
             </Card>
           )}

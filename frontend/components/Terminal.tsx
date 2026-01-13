@@ -341,6 +341,32 @@ export function Terminal({
             reader.readAsArrayBuffer(event.data);
           }
           
+          // Check output text for kubectl get nodes table pattern
+          if (onCommandDetected && outputText && typeof outputText === "string") {
+            const nodeTablePattern = /NAME\s+STATUS\s+ROLES\s+AGE\s+VERSION/i;
+            if (nodeTablePattern.test(outputText)) {
+              // Look for kubectl get nodes command
+              for (let i = commandBufferRef.current.length - 1; i >= 0; i--) {
+                const cmd = commandBufferRef.current[i];
+                if (cmd && /kubectl\s+get\s+(?:no|node|nodes)/i.test(cmd)) {
+                  const commandKey = `kubectl-get-nodes`;
+                  console.log("[Terminal] Output text detected - Node command, CommandKey:", commandKey);
+                  if (lastDetectedCommandRef.current !== commandKey) {
+                    console.log("[Terminal] Triggering from output text - nodes");
+                    lastDetectedCommandRef.current = commandKey;
+                    setTimeout(() => {
+                      if (lastDetectedCommandRef.current === commandKey) {
+                        lastDetectedCommandRef.current = null;
+                      }
+                    }, detectionCooldown);
+                    onCommandDetected("kubectl get nodes");
+                  }
+                  return;
+                }
+              }
+            }
+          }
+          
           // Check output text for kubectl get pods table pattern
           if (onCommandDetected && outputText && typeof outputText === "string") {
             const podTablePattern = /NAME\s+READY\s+STATUS\s+RESTARTS\s+AGE/i;
@@ -560,10 +586,30 @@ export function Terminal({
                 console.log("[Terminal] Skipping - same command detected (cooldown)");
               }
             } else {
-              // Any other command (not kubectl get pods) - close popout
-              console.log("[Terminal] Other command detected:", line, "- closing popout");
-              if (onCommandClose) {
-                onCommandClose();
+              // Check if it's a kubectl get nodes command
+              const kubectlGetNodesMatch = line.match(/kubectl\s+get\s+(?:no|node|nodes)(?:\s+.*)?$/i);
+              if (kubectlGetNodesMatch && onCommandDetected) {
+                const commandKey = `kubectl-get-nodes`;
+                console.log("[Terminal] Node command detected:", line, "CommandKey:", commandKey);
+                const isDifferentCommand = lastDetectedCommandRef.current !== commandKey;
+                if (isDifferentCommand) {
+                  console.log("[Terminal] Triggering node command detection");
+                  lastDetectedCommandRef.current = commandKey;
+                  setTimeout(() => {
+                    if (lastDetectedCommandRef.current === commandKey) {
+                      lastDetectedCommandRef.current = null;
+                    }
+                  }, detectionCooldown);
+                  onCommandDetected("kubectl get nodes");
+                } else {
+                  console.log("[Terminal] Skipping - same node command detected (cooldown)");
+                }
+              } else {
+                // Any other command (not kubectl get pods or nodes) - close popout
+                console.log("[Terminal] Other command detected:", line, "- closing popout");
+                if (onCommandClose) {
+                  onCommandClose();
+                }
               }
             }
           }
