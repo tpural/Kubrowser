@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Terminal } from "@/components/Terminal";
+import { useState, useRef } from "react";
+import { Terminal, TerminalHandle } from "@/components/Terminal";
 import { StatusBar } from "@/components/StatusBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PodList } from "@/components/PodList";
@@ -20,6 +20,7 @@ export default function Home() {
   const [podListNamespace, setPodListNamespace] = useState<string>("default");
   const [showNodeList, setShowNodeList] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const terminalRef = useRef<TerminalHandle>(null);
 
   const handleConnect = (newSessionId: string) => {
     setSessionId(newSessionId);
@@ -63,6 +64,24 @@ export default function Home() {
     console.log("Command close detected - closing popouts");
     setShowPodList(false);
     setShowNodeList(false);
+  };
+
+  const handlePodListClose = () => {
+    console.log("Pod list manually closed - resetting detection state");
+    setShowPodList(false);
+    // Reset Terminal's detection state so it can detect the same command again
+    if (terminalRef.current) {
+      terminalRef.current.resetDetection();
+    }
+  };
+
+  const handleNodeListClose = () => {
+    console.log("Node list manually closed - resetting detection state");
+    setShowNodeList(false);
+    // Reset Terminal's detection state so it can detect the same command again
+    if (terminalRef.current) {
+      terminalRef.current.resetDetection();
+    }
   };
 
   return (
@@ -133,6 +152,7 @@ export default function Home() {
                 </div>
               )}
               <Terminal
+                ref={terminalRef}
                 sessionId={sessionId}
                 onConnect={handleConnect}
                 onDisconnect={handleDisconnect}
@@ -149,7 +169,7 @@ export default function Home() {
                 <PodList
                   key={podListNamespace} // Force re-mount when namespace changes
                   namespace={podListNamespace}
-                  onClose={() => setShowPodList(false)}
+                  onClose={handlePodListClose}
                 />
               </div>
             </Card>
@@ -157,7 +177,7 @@ export default function Home() {
           {showNodeList && (
             <Card className="w-1/2 flex flex-col shadow-lg border-2">
               <div className="flex-1 overflow-hidden p-4">
-                <NodeList onClose={() => setShowNodeList(false)} />
+                <NodeList onClose={handleNodeListClose} />
               </div>
             </Card>
           )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -15,7 +15,11 @@ interface TerminalProps {
   onCommandClose?: () => void;
 }
 
-export function Terminal({
+export interface TerminalHandle {
+  resetDetection: () => void;
+}
+
+export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
   sessionId,
   onConnect,
   onDisconnect,
@@ -23,7 +27,7 @@ export function Terminal({
   shouldDisconnect = false,
   onCommandDetected,
   onCommandClose,
-}: TerminalProps) {
+}, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -32,6 +36,14 @@ export function Terminal({
   const initializedRef = useRef(false);
   const commandBufferRef = useRef<string[]>([]);
   const lastDetectedCommandRef = useRef<string | null>(null);
+  
+  // Expose reset function via ref for parent to call when popup is manually closed
+  useImperativeHandle(ref, () => ({
+    resetDetection: () => {
+      console.log("[Terminal] Resetting detection state (manual close)");
+      lastDetectedCommandRef.current = null;
+    },
+  }));
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(
     sessionId || null
   );
@@ -560,4 +572,4 @@ export function Terminal({
       <div ref={terminalRef} className="h-full w-full" />
     </div>
   );
-}
+});
