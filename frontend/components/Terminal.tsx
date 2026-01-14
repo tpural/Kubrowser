@@ -36,6 +36,19 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
   const initializedRef = useRef(false);
   const lastDetectedCommandRef = useRef<string | null>(null);
   
+  // Use refs to always get the latest callback values (avoid stale closures)
+  const onCommandDetectedRef = useRef(onCommandDetected);
+  const onCommandCloseRef = useRef(onCommandClose);
+  
+  // Keep refs updated
+  useEffect(() => {
+    onCommandDetectedRef.current = onCommandDetected;
+  }, [onCommandDetected]);
+  
+  useEffect(() => {
+    onCommandCloseRef.current = onCommandClose;
+  }, [onCommandClose]);
+  
   // Expose reset function via ref for parent to call when popup is manually closed
   useImperativeHandle(ref, () => ({
     resetDetection: () => {
@@ -392,8 +405,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
           // Non-kubectl commands close the popout
           if (!command.startsWith("kubectl")) {
             console.log("[Terminal] Non-kubectl command detected:", command, "- closing popout");
-            if (onCommandClose) {
-              onCommandClose();
+            if (onCommandCloseRef.current) {
+              onCommandCloseRef.current();
             }
             return;
           }
@@ -402,12 +415,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
           
           // Check if it's a kubectl get pods command
           const kubectlGetPodsMatch = command.match(/^kubectl\s+get\s+(?:po|pod|pods)(?:\s+.*)?$/i);
-          if (kubectlGetPodsMatch && onCommandDetected) {
+          if (kubectlGetPodsMatch && onCommandDetectedRef.current) {
             // Check for -A or --all-namespaces flag first (don't trigger for these)
             if (/-A\b|--all-namespaces/i.test(command)) {
               console.log("[Terminal] Detected -A or --all-namespaces - closing popout");
-              if (onCommandClose) {
-                onCommandClose();
+              if (onCommandCloseRef.current) {
+                onCommandCloseRef.current();
               }
               return;
             }
@@ -423,24 +436,24 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
             const commandKey = `kubectl-get-pods-${namespace}`;
             console.log("[Terminal] Opening pod list for namespace:", namespace);
             lastDetectedCommandRef.current = commandKey;
-            onCommandDetected("kubectl get pods", namespace);
+            onCommandDetectedRef.current("kubectl get pods", namespace);
             return;
           }
           
           // Check if it's a kubectl get nodes command
           const kubectlGetNodesMatch = command.match(/^kubectl\s+get\s+(?:no|node|nodes)(?:\s+.*)?$/i);
-          if (kubectlGetNodesMatch && onCommandDetected) {
+          if (kubectlGetNodesMatch && onCommandDetectedRef.current) {
             const commandKey = `kubectl-get-nodes`;
             console.log("[Terminal] Opening node list");
             lastDetectedCommandRef.current = commandKey;
-            onCommandDetected("kubectl get nodes");
+            onCommandDetectedRef.current("kubectl get nodes");
             return;
           }
           
           // Any other kubectl command - close popouts
           console.log("[Terminal] Other kubectl command - closing popouts");
-          if (onCommandClose) {
-            onCommandClose();
+          if (onCommandCloseRef.current) {
+            onCommandCloseRef.current();
           }
         } else if (data.length === 1 && data >= " " && data <= "~") {
           // Printable character - track for fallback

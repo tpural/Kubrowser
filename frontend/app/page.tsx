@@ -9,7 +9,7 @@ import { NodeList } from "@/components/NodeList";
 import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw, Pin, PinOff } from "lucide-react";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
@@ -20,6 +20,7 @@ export default function Home() {
   const [podListNamespace, setPodListNamespace] = useState<string>("default");
   const [showNodeList, setShowNodeList] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPinned, setIsPinned] = useState(false);
   const terminalRef = useRef<TerminalHandle>(null);
 
   const handleConnect = (newSessionId: string) => {
@@ -46,6 +47,12 @@ export default function Home() {
   };
 
   const handleCommandDetected = (command: string, namespace?: string) => {
+    // If pinned, don't respond to new commands
+    if (isPinned) {
+      console.log("Command detected but popout is pinned, ignoring");
+      return;
+    }
+    
     if (command === "kubectl get pods") {
       // Use provided namespace or default to "default"
       const detectedNamespace = namespace || "default";
@@ -61,6 +68,11 @@ export default function Home() {
   };
 
   const handleCommandClose = () => {
+    // If pinned, don't close
+    if (isPinned) {
+      console.log("Command close detected but popout is pinned, ignoring");
+      return;
+    }
     console.log("Command close detected - closing popouts");
     setShowPodList(false);
     setShowNodeList(false);
@@ -69,6 +81,7 @@ export default function Home() {
   const handlePodListClose = () => {
     console.log("Pod list manually closed - resetting detection state");
     setShowPodList(false);
+    setIsPinned(false); // Reset pin state when closing
     // Reset Terminal's detection state so it can detect the same command again
     if (terminalRef.current) {
       terminalRef.current.resetDetection();
@@ -78,10 +91,16 @@ export default function Home() {
   const handleNodeListClose = () => {
     console.log("Node list manually closed - resetting detection state");
     setShowNodeList(false);
+    setIsPinned(false); // Reset pin state when closing
     // Reset Terminal's detection state so it can detect the same command again
     if (terminalRef.current) {
       terminalRef.current.resetDetection();
     }
+  };
+
+  const togglePin = () => {
+    setIsPinned(!isPinned);
+    console.log("Popout", !isPinned ? "pinned" : "unpinned");
   };
 
   return (
@@ -164,7 +183,21 @@ export default function Home() {
             </div>
           </Card>
           {showPodList && (
-            <Card className="w-1/2 flex flex-col shadow-lg border-2">
+            <Card className={`w-1/2 flex flex-col shadow-lg border-2 ${isPinned ? "border-yellow-500" : ""}`}>
+              <div className="flex items-center justify-between p-2 border-b bg-muted/30">
+                <span className="text-sm font-medium">Pods - {podListNamespace}</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={togglePin}
+                    className={isPinned ? "text-yellow-500" : ""}
+                    title={isPinned ? "Unpin (respond to commands)" : "Pin (ignore new commands)"}
+                  >
+                    {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
               <div className="flex-1 overflow-hidden p-4">
                 <PodList
                   key={podListNamespace} // Force re-mount when namespace changes
@@ -175,7 +208,21 @@ export default function Home() {
             </Card>
           )}
           {showNodeList && (
-            <Card className="w-1/2 flex flex-col shadow-lg border-2">
+            <Card className={`w-1/2 flex flex-col shadow-lg border-2 ${isPinned ? "border-yellow-500" : ""}`}>
+              <div className="flex items-center justify-between p-2 border-b bg-muted/30">
+                <span className="text-sm font-medium">Nodes</span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={togglePin}
+                    className={isPinned ? "text-yellow-500" : ""}
+                    title={isPinned ? "Unpin (respond to commands)" : "Pin (ignore new commands)"}
+                  >
+                    {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
               <div className="flex-1 overflow-hidden p-4">
                 <NodeList onClose={handleNodeListClose} />
               </div>
