@@ -146,25 +146,54 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		}
 	}
 	
-	// Check if a pod with this name already exists and delete it if so
+	// Check if a pod with this name already exists and wait for it to be fully deleted
 	existingPod, err := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err == nil && existingPod != nil {
-		// Pod exists, delete it first
+		// Pod exists, delete it first and wait for it to be fully gone
 		if statusCallback != nil {
 			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Cleaning up existing pod for user %s...\x1b[0m", sanitizedUsername))
 		}
-		deletePolicy := metav1.DeletePropagationForeground
-		deleteErr := pm.client.CoreV1().Pods(pm.namespace).Delete(ctx, podName, metav1.DeleteOptions{
-			PropagationPolicy: &deletePolicy,
-		})
-		if deleteErr != nil && !errors.IsNotFound(deleteErr) {
-			// Log but continue - we'll try to create anyway
-			if statusCallback != nil {
-				statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[!] Warning: Failed to delete existing pod: %v\x1b[0m\r\n", deleteErr))
+		
+		// Only delete if not already terminating
+		if existingPod.DeletionTimestamp == nil {
+			deletePolicy := metav1.DeletePropagationForeground
+			deleteErr := pm.client.CoreV1().Pods(pm.namespace).Delete(ctx, podName, metav1.DeleteOptions{
+				PropagationPolicy: &deletePolicy,
+			})
+			if deleteErr != nil && !errors.IsNotFound(deleteErr) {
+				if statusCallback != nil {
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[!] Warning: Failed to delete existing pod: %v\x1b[0m\r\n", deleteErr))
+				}
 			}
-		} else {
-			// Wait a moment for deletion to propagate
-			time.Sleep(1 * time.Second)
+		}
+		
+		// Wait for pod to be fully deleted (up to 60 seconds)
+		waitStart := time.Now()
+		waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+			_, getErr := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
+			if errors.IsNotFound(getErr) {
+				return true, nil // Pod is fully deleted
+			}
+			if getErr != nil {
+				return false, getErr
+			}
+			// Pod still exists, update status
+			if statusCallback != nil {
+				elapsed := time.Since(waitStart)
+				statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for previous session to terminate... (%v)\x1b[0m", elapsed.Round(time.Millisecond)))
+			}
+			return false, nil
+		})
+		
+		if waitErr != nil {
+			if statusCallback != nil {
+				statusCallback("\r\x1b[K\x1b[31m[✗] Timeout waiting for old pod to terminate\x1b[0m\r\n")
+			}
+			return nil, fmt.Errorf("timeout waiting for existing pod to terminate: %w", waitErr)
+		}
+		
+		if statusCallback != nil {
+			statusCallback("\r\x1b[K\x1b[32m[✓] Previous session cleaned up\x1b[0m\r\n")
 		}
 	}
 

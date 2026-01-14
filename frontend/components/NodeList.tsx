@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, RefreshCw, Server, Cpu, HardDrive, Network, ChevronDown, ChevronRight } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { 
+  RefreshCw, Server, Cpu, HardDrive, Network, 
+  ChevronDown, ChevronRight, Clock, Container,
+  Activity, Zap, MemoryStick
+} from "lucide-react";
 
 interface Node {
   name: string;
@@ -33,11 +40,103 @@ interface NodeListProps {
   onClose?: () => void;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 24,
+    },
+  },
+};
+
+const expandVariants = {
+  hidden: { opacity: 0, height: 0 },
+  visible: { 
+    opacity: 1, 
+    height: "auto",
+    transition: {
+      height: { duration: 0.3 },
+      opacity: { duration: 0.2, delay: 0.1 },
+    },
+  },
+  exit: { 
+    opacity: 0, 
+    height: 0,
+    transition: {
+      height: { duration: 0.2 },
+      opacity: { duration: 0.1 },
+    },
+  },
+};
+
+// Resource bar component
+function ResourceBar({ 
+  used, 
+  total, 
+  label, 
+  color = "blue" 
+}: { 
+  used: string; 
+  total: string; 
+  label: string;
+  color?: "blue" | "green" | "purple" | "amber";
+}) {
+  // Parse memory values (e.g., "16Gi" -> 16)
+  const parseValue = (val: string): number => {
+    const num = parseFloat(val.replace(/[^0-9.]/g, ''));
+    return isNaN(num) ? 0 : num;
+  };
+  
+  const usedNum = parseValue(used);
+  const totalNum = parseValue(total);
+  const percentage = totalNum > 0 ? Math.min((usedNum / totalNum) * 100, 100) : 0;
+  
+  const colorClasses = {
+    blue: "from-blue-500 to-cyan-400",
+    green: "from-emerald-500 to-teal-400",
+    purple: "from-purple-500 to-pink-400",
+    amber: "from-amber-500 to-orange-400",
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground font-medium">{label}</span>
+        <span className="font-mono text-foreground">{used} / {total}</span>
+      </div>
+      <div className="resource-bar h-2">
+        <motion.div
+          className={`resource-bar-fill bg-gradient-to-r ${colorClasses[color]}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function NodeList({ onClose }: NodeListProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const getApiUrl = () => {
     if (process.env.NEXT_PUBLIC_API_URL) {
@@ -53,60 +152,57 @@ export function NodeList({ onClose }: NodeListProps) {
     return "http://localhost:8080";
   };
 
-  const fetchNodes = async () => {
+  const fetchNodes = async (showToast = false) => {
     setLoading(true);
     setError(null);
     try {
       const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/v1/nodes`;
-      console.log("[NodeList] Fetching nodes from:", url);
       const response = await fetch(url);
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("[NodeList] API error:", response.status, errorText);
         setError(`Failed to fetch nodes: ${response.statusText}`);
         setNodes([]);
         return;
       }
       const data = await response.json();
-      console.log("[NodeList] Received nodes:", data.nodes?.length || 0);
-      // Log first node to debug role field
-      if (data.nodes && data.nodes.length > 0) {
-        console.log("[NodeList] First node sample:", {
-          name: data.nodes[0].name,
-          role: data.nodes[0].role,
-          status: data.nodes[0].status
-        });
-      }
       setNodes(data.nodes || []);
+      if (showToast) {
+        toast.success(`Refreshed ${data.nodes?.length || 0} nodes`);
+      }
     } catch (err) {
       console.error("[NodeList] Error fetching nodes:", err);
       if (err instanceof TypeError && err.message.includes("fetch")) {
-        setError("Failed to connect to backend server. Please ensure the backend is running.");
+        setError("Failed to connect to backend server.");
       } else {
         setError(err instanceof Error ? err.message : "Failed to fetch nodes");
       }
       setNodes([]);
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   };
 
   useEffect(() => {
     fetchNodes();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchNodes, 10000);
+    const interval = setInterval(() => fetchNodes(false), 10000);
     return () => clearInterval(interval);
   }, []);
 
+  const getStatusDot = (status: string, ready: boolean) => {
+    if (status === "Ready" && ready) return "status-dot status-dot-running";
+    if (status === "NotReady") return "status-dot status-dot-failed";
+    return "status-dot status-dot-pending";
+  };
+
   const getStatusColor = (status: string, ready: boolean) => {
     if (status === "Ready" && ready) {
-      return "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50";
+      return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
     }
     if (status === "NotReady") {
-      return "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50";
+      return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30";
     }
-    return "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/50";
+    return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30";
   };
 
   const toggleNode = (nodeName: string) => {
@@ -123,31 +219,79 @@ export function NodeList({ onClose }: NodeListProps) {
 
   const getRoleColor = (role: string) => {
     if (role === "control-plane" || role === "master") {
-      return "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/50";
+      return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30";
     }
-    return "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/50";
+    return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30";
   };
 
+  const getRoleIcon = (role: string) => {
+    if (role === "control-plane" || role === "master") {
+      return <Zap className="h-3 w-3 mr-1" />;
+    }
+    return <Activity className="h-3 w-3 mr-1" />;
+  };
+
+  // Skeleton loading
+  if (initialLoad) {
+    return (
+      <Card className="p-4 h-full flex flex-col glass">
+        <div className="flex items-center justify-between mb-4">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-9" />
+            <Skeleton className="h-9 w-16" />
+          </div>
+        </div>
+        <div className="space-y-3 flex-1">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i} className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-5 w-5" />
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-5 w-24" />
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
+    <Card className="p-4 h-full flex flex-col glass overflow-hidden">
+      {/* Header */}
+      <motion.div 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between mb-4"
+      >
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Server className="h-5 w-5" />
-            Kubernetes Nodes
+            <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
+              <Server className="h-4 w-4 text-white" />
+            </div>
+            <span>Kubernetes Nodes</span>
           </h2>
-          <p className="text-sm text-muted-foreground">
-            {nodes.length} node{nodes.length !== 1 ? "s" : ""} found
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {nodes.length} node{nodes.length !== 1 ? "s" : ""} • 
+            {nodes.filter(n => n.ready).length} ready
           </p>
         </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchNodes}
+            onClick={() => fetchNodes(true)}
             disabled={loading}
+            className="relative overflow-hidden group"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 transition-transform group-hover:rotate-180 duration-500 ${loading ? "animate-spin" : ""}`} />
           </Button>
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose}>
@@ -155,199 +299,238 @@ export function NodeList({ onClose }: NodeListProps) {
             </Button>
           )}
         </div>
-      </div>
+      </motion.div>
 
-      {loading && nodes.length === 0 ? (
-        <div className="flex items-center justify-center flex-1">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {/* Content */}
+      {error ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <Alert variant="destructive" className="border-red-500/50 bg-red-500/10">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </motion.div>
       ) : nodes.length === 0 ? (
-        <div className="flex items-center justify-center flex-1 text-muted-foreground">
-          No nodes found
-        </div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center flex-1 text-muted-foreground py-12"
+        >
+          <Server className="h-12 w-12 mb-4 opacity-20" />
+          <p className="text-lg font-medium">No nodes found</p>
+        </motion.div>
       ) : (
-        <div className="flex-1 overflow-auto">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="flex-1 overflow-auto custom-scrollbar pr-1"
+        >
           <div className="space-y-2">
             {nodes.map((node) => {
               const isExpanded = expandedNodes.has(node.name);
               return (
-                <Card
+                <motion.div
                   key={node.name}
-                  className="border-2 transition-colors"
+                  variants={itemVariants}
+                  layout
                 >
-                  {/* Collapsed Header - Always Visible */}
-                  <div
-                    className="p-3 hover:bg-accent/50 cursor-pointer flex items-center justify-between gap-2"
-                    onClick={() => toggleNode(node.name)}
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      )}
-                      <h3 className="font-semibold truncate">{node.name}</h3>
-                      <Badge
-                        variant="outline"
-                        className={getStatusColor(node.status, node.ready)}
-                      >
-                        {node.status}
-                      </Badge>
-                      {node.role && node.role.trim() !== "" ? (
+                  <Card className={`card-hover overflow-hidden transition-all duration-300 ${
+                    isExpanded ? "ring-2 ring-blue-500/20" : ""
+                  }`}>
+                    {/* Header - Always Visible */}
+                    <motion.div
+                      className="p-3 cursor-pointer flex items-center justify-between gap-2 hover:bg-accent/30 transition-colors"
+                      onClick={() => toggleNode(node.name)}
+                      whileTap={{ scale: 0.995 }}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <motion.div
+                          animate={{ rotate: isExpanded ? 90 : 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        </motion.div>
+                        <span className={getStatusDot(node.status, node.ready)} />
+                        <h3 className="font-semibold truncate">{node.name}</h3>
                         <Badge
                           variant="outline"
-                          className={getRoleColor(node.role)}
+                          className={`${getStatusColor(node.status, node.ready)} text-xs`}
                         >
-                          {node.role}
+                          {node.status}
                         </Badge>
-                      ) : (
                         <Badge
                           variant="outline"
-                          className={getRoleColor("worker")}
+                          className={`${getRoleColor(node.role || "worker")} text-xs flex items-center`}
                         >
-                          worker
+                          {getRoleIcon(node.role || "worker")}
+                          {node.role || "worker"}
                         </Badge>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {node.uptime}
+                      </div>
+                    </motion.div>
 
-                  {/* Expanded Content */}
-                  {isExpanded && (
-                    <div className="p-4 pt-0 space-y-3 border-t">
+                    {/* Expanded Content */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          variants={expandVariants}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                          className="overflow-hidden"
+                        >
+                          <div className="p-4 pt-0 space-y-4 border-t bg-accent/5">
+                            {/* Resource Bars */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <Cpu className="h-4 w-4 text-blue-500" />
+                                  <span>CPU</span>
+                                </div>
+                                <ResourceBar
+                                  used={node.cpuAllocatable}
+                                  total={node.cpuCapacity}
+                                  label="Allocatable"
+                                  color="blue"
+                                />
+                              </div>
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <MemoryStick className="h-4 w-4 text-purple-500" />
+                                  <span>Memory</span>
+                                </div>
+                                <ResourceBar
+                                  used={node.memoryAllocatable}
+                                  total={node.memoryCapacity}
+                                  label="Allocatable"
+                                  color="purple"
+                                />
+                              </div>
+                            </div>
 
-                      {/* Network Info */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm">
-                            <Network className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">Network:</span>
-                          </div>
-                          <div className="pl-6 space-y-1 text-sm text-muted-foreground">
-                            {node.internalIP && (
-                              <div>
-                                <span className="font-medium">Internal IP:</span>{" "}
-                                <span className="font-mono text-blue-600 dark:text-blue-400">
-                                  {node.internalIP}
-                                </span>
+                            {/* Network & System Info */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                              {/* Network */}
+                              <div className="space-y-2 p-3 rounded-lg bg-card/50">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <Network className="h-4 w-4 text-cyan-500" />
+                                  <span>Network</span>
+                                </div>
+                                <div className="space-y-1 text-sm">
+                                  {node.internalIP && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Internal IP</span>
+                                      <span className="font-mono text-cyan-600 dark:text-cyan-400">
+                                        {node.internalIP}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {node.externalIP && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">External IP</span>
+                                      <span className="font-mono text-purple-600 dark:text-purple-400">
+                                        {node.externalIP}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* System */}
+                              <div className="space-y-2 p-3 rounded-lg bg-card/50">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <Container className="h-4 w-4 text-amber-500" />
+                                  <span>System</span>
+                                </div>
+                                <div className="space-y-1 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">OS</span>
+                                    <span>{node.operatingSystem} ({node.architecture})</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Kubelet</span>
+                                    <span className="font-mono text-blue-600 dark:text-blue-400">
+                                      {node.kubeletVersion}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Additional Info */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 text-sm">
+                              <div className="p-3 rounded-lg bg-card/50">
+                                <div className="text-muted-foreground mb-1">OS Image</div>
+                                <div className="truncate" title={node.osImage}>{node.osImage}</div>
+                              </div>
+                              <div className="p-3 rounded-lg bg-card/50">
+                                <div className="text-muted-foreground mb-1">Container Runtime</div>
+                                <div className="truncate">{node.containerRuntime}</div>
+                              </div>
+                              <div className="p-3 rounded-lg bg-card/50">
+                                <div className="text-muted-foreground mb-1">Age</div>
+                                <div>{node.age}</div>
+                              </div>
+                            </div>
+
+                            {/* Taints */}
+                            {node.taints && node.taints.length > 0 && (
+                              <div className="pt-2">
+                                <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                                  <HardDrive className="h-4 w-4 text-amber-500" />
+                                  Taints
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {node.taints.map((taint, idx) => (
+                                    <Badge
+                                      key={idx}
+                                      variant="outline"
+                                      className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-xs"
+                                    >
+                                      {taint}
+                                    </Badge>
+                                  ))}
+                                </div>
                               </div>
                             )}
-                            {node.externalIP && (
-                              <div>
-                                <span className="font-medium">External IP:</span>{" "}
-                                <span className="font-mono text-purple-600 dark:text-purple-400">
-                                  {node.externalIP}
-                                </span>
+
+                            {/* Labels */}
+                            {node.labels && Object.keys(node.labels).length > 0 && (
+                              <div className="pt-2">
+                                <div className="text-sm font-medium mb-2">Labels</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Object.entries(node.labels).slice(0, 6).map(([key, value]) => (
+                                    <Badge
+                                      key={key}
+                                      variant="outline"
+                                      className="text-xs bg-card/80"
+                                    >
+                                      {key}={value}
+                                    </Badge>
+                                  ))}
+                                  {Object.keys(node.labels).length > 6 && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      +{Object.keys(node.labels).length - 6} more
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
-                        </div>
-
-                        {/* Resources */}
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-sm">
-                            <Cpu className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">Resources:</span>
-                          </div>
-                          <div className="pl-6 space-y-1 text-sm text-muted-foreground">
-                            <div>
-                              <span className="font-medium">CPU:</span>{" "}
-                              <span className="font-mono text-green-600 dark:text-green-400">
-                                {node.cpuAllocatable} / {node.cpuCapacity}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="font-medium">Memory:</span>{" "}
-                              <span className="font-mono text-green-600 dark:text-green-400">
-                                {node.memoryAllocatable} / {node.memoryCapacity}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* System Info */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t">
-                        <div className="space-y-1 text-sm">
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">OS:</span> {node.operatingSystem} ({node.architecture})
-                          </div>
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">OS Image:</span> {node.osImage}
-                          </div>
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">Container Runtime:</span> {node.containerRuntime}
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">Kubelet Version:</span>{" "}
-                            <span className="font-mono text-blue-600 dark:text-blue-400">
-                              {node.kubeletVersion}
-                            </span>
-                          </div>
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">Uptime:</span>{" "}
-                            <span className="text-green-600 dark:text-green-400 font-medium">
-                              {node.uptime}
-                            </span>
-                          </div>
-                          <div className="text-muted-foreground">
-                            <span className="font-medium">Age:</span> {node.age}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Taints */}
-                      {node.taints && node.taints.length > 0 && (
-                        <div className="pt-2 border-t">
-                          <div className="text-sm font-medium mb-1">Taints:</div>
-                          <div className="flex flex-wrap gap-1">
-                            {node.taints.map((taint, idx) => (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/50 text-xs"
-                              >
-                                {taint}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
+                        </motion.div>
                       )}
-
-                      {/* Labels */}
-                      {node.labels && Object.keys(node.labels).length > 0 && (
-                        <div className="pt-2 border-t">
-                          <div className="text-sm font-medium mb-1">Labels:</div>
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(node.labels).slice(0, 5).map(([key, value]) => (
-                              <Badge
-                                key={key}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {key}={value}
-                              </Badge>
-                            ))}
-                            {Object.keys(node.labels).length > 5 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{Object.keys(node.labels).length - 5} more
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </Card>
+                    </AnimatePresence>
+                  </Card>
+                </motion.div>
               );
             })}
           </div>
-        </div>
+        </motion.div>
       )}
     </Card>
   );
