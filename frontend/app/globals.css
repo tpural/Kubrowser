@@ -191,7 +191,8 @@
 }
 
 .status-dot-pending {
-  @apply bg-yellow-500 animate-pulse-slow;
+  @apply bg-yellow-500;
+  animation: pulse-slow 2s ease-in-out infinite;
   box-shadow: 0 0 8px rgba(234, 179, 8, 0.6);
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, FileText, Download, ArrowDown } from "lucide-react";
+import { Loader2, RefreshCw, FileText, Download, ArrowDown, Play, Pause } from "lucide-react";
 
 interface PodLogsProps {
   podName: string;
@@ -21,12 +21,15 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
   const [logs, setLogs] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoTail, setAutoTail] = useState(true);
   const logsContainerRef = useRef<HTMLDivElement>(null);
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialLoadRef = useRef(true);
+  const userScrolledUpRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   const getApiUrl = () => {
     if (process.env.NEXT_PUBLIC_API_URL) {
@@ -42,7 +45,16 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     return "http://localhost:8080";
   };
 
-  const fetchLogs = () => {
+  // Force scroll to bottom - aggressive approach
+  const forceScrollToBottom = useCallback(() => {
+    const container = logsContainerRef.current;
+    if (!container) return;
+    
+    // Direct DOM manipulation for immediate effect
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
+  const fetchLogs = useCallback(() => {
     try {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -57,6 +69,9 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     setLoading(true);
     setError(null);
     setLogs("");
+    setAutoTail(true);
+    isInitialLoadRef.current = true;
+    userScrolledUpRef.current = false;
     
     const apiUrl = getApiUrl();
     const url = `${apiUrl}/api/v1/pods/${podName}/logs?namespace=${encodeURIComponent(namespace)}&tail=500&follow=true`;
@@ -105,7 +120,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
           setLoading(false);
         }
       });
-  };
+  }, [podName, namespace]);
 
   const downloadLogs = () => {
     const blob = new Blob([logs], { type: "text/plain" });
@@ -119,18 +134,16 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     URL.revokeObjectURL(url);
   };
 
-  const scrollToBottom = () => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
   useEffect(() => {
     mountedRef.current = true;
     fetchLogs();
     
     return () => {
       mountedRef.current = false;
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
       try {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
@@ -144,30 +157,114 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
         }
       } catch {}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [podName, namespace]);
+  }, [fetchLogs]);
 
+  // Use useEffect for scroll updates - more reliable with async rendering
   useEffect(() => {
-    if (autoScroll && logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (!logs || !logsContainerRef.current) return;
+    
+    const container = logsContainerRef.current;
+    
+    // Aggressive scroll function that tries multiple times
+    const scrollToEnd = () => {
+      if (!logsContainerRef.current) return;
+      const c = logsContainerRef.current;
+      c.scrollTop = c.scrollHeight;
+    };
+    
+    // During initial load (first 3 seconds), keep scrolling to bottom aggressively
+    if (isInitialLoadRef.current) {
+      // Immediate scroll
+      scrollToEnd();
+      
+      // Use a polling mechanism during initial load
+      const intervalId = setInterval(scrollToEnd, 100);
+      
+      // Also use RAF for additional coverage
+      const rafId = requestAnimationFrame(() => {
+        scrollToEnd();
+        requestAnimationFrame(scrollToEnd);
+      });
+      
+      // After 3 seconds, transition to normal auto-tail behavior
+      const timer = setTimeout(() => {
+        isInitialLoadRef.current = false;
+        clearInterval(intervalId);
+      }, 3000);
+      
+      return () => {
+        clearTimeout(timer);
+        clearInterval(intervalId);
+        cancelAnimationFrame(rafId);
+      };
     }
-  }, [logs, autoScroll]);
+    
+    // After initial load, only scroll if auto-tail is enabled and user hasn't scrolled up
+    if (autoTail && !userScrolledUpRef.current) {
+      scrollToEnd();
+      // Also schedule a follow-up scroll
+      const timeoutId = setTimeout(scrollToEnd, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [logs, autoTail]);
 
-  // Detect manual scroll
-  const handleScroll = () => {
-    if (!logsContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = logsContainerRef.current;
+  // Detect manual scroll - disable auto-tail if user scrolls up
+  const handleScroll = useCallback(() => {
+    const container = logsContainerRef.current;
+    if (!container) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = container;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-    setAutoScroll(isAtBottom);
-  };
+    
+    // Detect scroll direction
+    const scrolledUp = scrollTop < lastScrollTopRef.current;
+    lastScrollTopRef.current = scrollTop;
+    
+    // Clear any existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+    
+    // If user scrolled up, mark it and disable auto-tail
+    if (scrolledUp && !isAtBottom) {
+      userScrolledUpRef.current = true;
+      if (autoTail) {
+        setAutoTail(false);
+      }
+    }
+    
+    // If user scrolled to bottom, re-enable auto-tail
+    if (isAtBottom) {
+      userScrolledUpRef.current = false;
+      scrollTimeoutRef.current = setTimeout(() => {
+        if (!autoTail) {
+          setAutoTail(true);
+        }
+      }, 100);
+    }
+  }, [autoTail]);
+
+  const toggleAutoTail = useCallback(() => {
+    const newValue = !autoTail;
+    setAutoTail(newValue);
+    userScrolledUpRef.current = !newValue;
+    
+    if (newValue) {
+      // Immediately scroll to bottom when enabling
+      forceScrollToBottom();
+      // Also schedule a follow-up scroll
+      requestAnimationFrame(forceScrollToBottom);
+      setTimeout(forceScrollToBottom, 50);
+    }
+  }, [autoTail, forceScrollToBottom]);
 
   const lineCount = logs.split('\n').length - 1;
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent 
-        className="max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden"
-        style={{ maxWidth: '70vw', width: '70vw' }}
+        className="p-0 overflow-hidden"
+        style={{ maxWidth: '70vw', width: '70vw', maxHeight: '90vh' }}
       >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
@@ -186,7 +283,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
 
         {/* Toolbar */}
         <div className="flex justify-between items-center px-4 py-2 border-b bg-muted/30">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             {loading && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -197,6 +294,25 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                 Streaming...
               </motion.div>
             )}
+            <Button
+              variant={autoTail ? "default" : "outline"}
+              size="sm"
+              onClick={toggleAutoTail}
+              className={`h-8 text-xs ${autoTail ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
+              title={autoTail ? "Auto-tail is ON - click to pause" : "Auto-tail is OFF - click to follow"}
+            >
+              {autoTail ? (
+                <>
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Following
+                </>
+              ) : (
+                <>
+                  <Pause className="h-3.5 w-3.5 mr-1.5" />
+                  Paused
+                </>
+              )}
+            </Button>
           </div>
           <div className="flex gap-2">
             <Button
@@ -223,11 +339,15 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
         </div>
 
         {/* Logs Content */}
-        <div className="flex-1 h-[60vh] overflow-hidden relative">
+        <div className="relative overflow-hidden" style={{ height: '60vh', minHeight: '300px' }}>
           <div 
             ref={logsContainerRef}
             onScroll={handleScroll}
-            className="h-full overflow-auto bg-[#0d1117] text-[#c9d1d9] font-mono text-xs p-4 custom-scrollbar"
+            className="h-full w-full overflow-y-auto overflow-x-hidden bg-[#0d1117] text-[#c9d1d9] font-mono text-xs"
+            style={{ 
+              scrollBehavior: 'auto',
+              overscrollBehavior: 'contain'
+            }}
           >
             <AnimatePresence mode="wait">
               {loading && !logs ? (
@@ -236,7 +356,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="flex items-center justify-center h-full"
+                  className="flex items-center justify-center h-full p-4"
                 >
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
@@ -248,7 +368,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                   key="error"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-col items-center justify-center h-full gap-2"
+                  className="flex flex-col items-center justify-center h-full gap-2 p-4"
                 >
                   <div className="text-red-400 text-sm">{error}</div>
                   <Button variant="outline" size="sm" onClick={fetchLogs}>
@@ -260,8 +380,9 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                   key="logs"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
+                  className="p-4"
                 >
-                  <pre className="whitespace-pre-wrap break-words leading-relaxed">
+                  <pre className="whitespace-pre-wrap break-words leading-relaxed m-0">
                     {logs.split('\n').map((line, i) => (
                       <div 
                         key={i} 
@@ -276,7 +397,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                           line.toLowerCase().includes('info') ? 'text-blue-400' :
                           ''
                         }>
-                          {line}
+                          {line || '\u00A0'}
                         </span>
                       </div>
                     ))}
@@ -293,12 +414,11 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div ref={logsEndRef} />
           </div>
 
           {/* Scroll to bottom button */}
           <AnimatePresence>
-            {!autoScroll && logs && (
+            {!autoTail && logs && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -307,11 +427,11 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
               >
                 <Button
                   size="sm"
-                  onClick={scrollToBottom}
+                  onClick={toggleAutoTail}
                   className="shadow-lg bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
                   <ArrowDown className="h-4 w-4 mr-1.5" />
-                  Scroll to bottom
+                  Follow logs
                 </Button>
               </motion.div>
             )}
