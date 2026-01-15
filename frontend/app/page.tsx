@@ -14,9 +14,9 @@ import { AlertCircle, RefreshCw, Pin, PinOff, Sparkles } from "lucide-react";
 
 const slideVariants = {
   hidden: { opacity: 0, x: 50, scale: 0.95 },
-  visible: { 
-    opacity: 1, 
-    x: 0, 
+  visible: {
+    opacity: 1,
+    x: 0,
     scale: 1,
     transition: {
       type: "spring" as const,
@@ -24,53 +24,41 @@ const slideVariants = {
       damping: 30,
     },
   },
-  exit: { 
-    opacity: 0, 
-    x: 50, 
+  exit: {
+    opacity: 0,
+    x: 50,
     scale: 0.95,
     transition: { duration: 0.2 },
   },
 };
 
+import { useTerminalSession } from "@/hooks/useTerminalSession";
+
 export default function Home() {
-  const [connected, setConnected] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>();
-  const [podName] = useState<string | undefined>();
-  const [shouldDisconnect, setShouldDisconnect] = useState(false);
+  const {
+    connected,
+    sessionId,
+    podName,
+    shouldDisconnect,
+    error,
+    handleConnect,
+    handleDisconnect,
+    handleReconnect,
+    handleError,
+    clearError
+  } = useTerminalSession();
+
   const [showPodList, setShowPodList] = useState(false);
   const [podListNamespace, setPodListNamespace] = useState<string>("default");
   const [showNodeList, setShowNodeList] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(false);
   const terminalRef = useRef<TerminalHandle>(null);
-
-  const handleConnect = (newSessionId: string) => {
-    setSessionId(newSessionId);
-    setConnected(true);
-    setShouldDisconnect(false);
-    setError(null);
-  };
-
-  const handleDisconnect = () => {
-    setShouldDisconnect(true);
-    setConnected(false);
-  };
-
-  const handleReconnect = () => {
-    setError(null);
-    window.location.reload();
-  };
-
-  const handleError = (errorMessage: string) => {
-    setError(errorMessage);
-    setConnected(false);
-  };
 
   const handleCommandDetected = (command: string, namespace?: string) => {
     if (isPinned) {
       return;
     }
-    
+
     if (command === "kubectl get pods") {
       const detectedNamespace = namespace || "default";
       setPodListNamespace(detectedNamespace);
@@ -115,14 +103,14 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col bg-gradient-to-br from-background via-background to-muted/30">
       {/* Header */}
-      <motion.header 
+      <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="border-b bg-card/80 backdrop-blur-xl supports-[backdrop-filter]:bg-card/60 sticky top-0 z-50"
       >
         <div className="flex items-center justify-between py-3 px-4">
           <div className="flex items-center gap-4">
-            <motion.div 
+            <motion.div
               className="relative h-14 w-14 flex-shrink-0"
               whileHover={{ scale: 1.05, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400 }}
@@ -134,8 +122,8 @@ export default function Home() {
               />
             </motion.div>
             <div>
-              <h1 
-                className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[#326CE5] to-[#5B8FF9] bg-clip-text text-transparent" 
+              <h1
+                className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[#326CE5] to-[#5B8FF9] bg-clip-text text-transparent"
                 style={{ fontFamily: 'var(--font-jetbrains-mono)' }}
               >
                 Kubrowser
@@ -213,7 +201,7 @@ export default function Home() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => setError(null)}
+                                onClick={clearError}
                               >
                                 Dismiss
                               </Button>
@@ -250,9 +238,8 @@ export default function Home() {
                 exit="exit"
                 className="w-1/2 flex flex-col"
               >
-                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${
-                  isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                }`}>
+                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
+                  }`}>
                   {/* Panel Header */}
                   <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-blue-500/10 to-purple-500/10">
                     <div className="flex items-center gap-2">
@@ -293,9 +280,8 @@ export default function Home() {
                 exit="exit"
                 className="w-1/2 flex flex-col"
               >
-                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${
-                  isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                }`}>
+                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
+                  }`}>
                   {/* Panel Header */}
                   <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
                     <div className="flex items-center gap-2">

@@ -7,7 +7,7 @@ import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
   sessionId?: string;
-  onConnect?: (sessionId: string) => void;
+  onConnect?: (sessionId: string, podName?: string) => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
   shouldDisconnect?: boolean;
@@ -35,20 +35,20 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
   const connectingRef = useRef(false);
   const initializedRef = useRef(false);
   const lastDetectedCommandRef = useRef<string | null>(null);
-  
+
   // Use refs to always get the latest callback values (avoid stale closures)
   const onCommandDetectedRef = useRef(onCommandDetected);
   const onCommandCloseRef = useRef(onCommandClose);
-  
+
   // Keep refs updated
   useEffect(() => {
     onCommandDetectedRef.current = onCommandDetected;
   }, [onCommandDetected]);
-  
+
   useEffect(() => {
     onCommandCloseRef.current = onCommandClose;
   }, [onCommandClose]);
-  
+
   // Expose reset function via ref for parent to call when popup is manually closed
   useImperativeHandle(ref, () => ({
     resetDetection: () => {
@@ -90,47 +90,47 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
       fontFamily: "Monaco, Menlo, 'Ubuntu Mono', monospace",
       theme: isDark
         ? {
-            background: "#0a0a0a",
-            foreground: "#e4e4e7",
-            cursor: "#f4f4f5",
-            black: "#18181b",
-            red: "#ef4444",
-            green: "#22c55e",
-            yellow: "#eab308",
-            blue: "#3b82f6",
-            magenta: "#a855f7",
-            cyan: "#06b6d4",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#f87171",
-            brightGreen: "#4ade80",
-            brightYellow: "#fbbf24",
-            brightBlue: "#60a5fa",
-            brightMagenta: "#c084fc",
-            brightCyan: "#22d3ee",
-            brightWhite: "#ffffff",
-          }
+          background: "#0a0a0a",
+          foreground: "#e4e4e7",
+          cursor: "#f4f4f5",
+          black: "#18181b",
+          red: "#ef4444",
+          green: "#22c55e",
+          yellow: "#eab308",
+          blue: "#3b82f6",
+          magenta: "#a855f7",
+          cyan: "#06b6d4",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#f87171",
+          brightGreen: "#4ade80",
+          brightYellow: "#fbbf24",
+          brightBlue: "#60a5fa",
+          brightMagenta: "#c084fc",
+          brightCyan: "#22d3ee",
+          brightWhite: "#ffffff",
+        }
         : {
-            background: "#ffffff",
-            foreground: "#18181b",
-            cursor: "#09090b",
-            black: "#09090b",
-            red: "#dc2626",
-            green: "#16a34a",
-            yellow: "#ca8a04",
-            blue: "#2563eb",
-            magenta: "#9333ea",
-            cyan: "#0891b2",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#ef4444",
-            brightGreen: "#22c55e",
-            brightYellow: "#eab308",
-            brightBlue: "#3b82f6",
-            brightMagenta: "#a855f7",
-            brightCyan: "#06b6d4",
-            brightWhite: "#ffffff",
-          },
+          background: "#ffffff",
+          foreground: "#18181b",
+          cursor: "#09090b",
+          black: "#09090b",
+          red: "#dc2626",
+          green: "#16a34a",
+          yellow: "#ca8a04",
+          blue: "#2563eb",
+          magenta: "#9333ea",
+          cyan: "#0891b2",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#ef4444",
+          brightGreen: "#22c55e",
+          brightYellow: "#eab308",
+          brightBlue: "#3b82f6",
+          brightMagenta: "#a855f7",
+          brightCyan: "#06b6d4",
+          brightWhite: "#ffffff",
+        },
     });
 
     const fitAddon = new FitAddon();
@@ -147,47 +147,47 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
       const isDark = document.documentElement.classList.contains("dark");
       xtermRef.current.options.theme = isDark
         ? {
-            background: "#0a0a0a",
-            foreground: "#e4e4e7",
-            cursor: "#f4f4f5",
-            black: "#18181b",
-            red: "#ef4444",
-            green: "#22c55e",
-            yellow: "#eab308",
-            blue: "#3b82f6",
-            magenta: "#a855f7",
-            cyan: "#06b6d4",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#f87171",
-            brightGreen: "#4ade80",
-            brightYellow: "#fbbf24",
-            brightBlue: "#60a5fa",
-            brightMagenta: "#c084fc",
-            brightCyan: "#22d3ee",
-            brightWhite: "#ffffff",
-          }
+          background: "#0a0a0a",
+          foreground: "#e4e4e7",
+          cursor: "#f4f4f5",
+          black: "#18181b",
+          red: "#ef4444",
+          green: "#22c55e",
+          yellow: "#eab308",
+          blue: "#3b82f6",
+          magenta: "#a855f7",
+          cyan: "#06b6d4",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#f87171",
+          brightGreen: "#4ade80",
+          brightYellow: "#fbbf24",
+          brightBlue: "#60a5fa",
+          brightMagenta: "#c084fc",
+          brightCyan: "#22d3ee",
+          brightWhite: "#ffffff",
+        }
         : {
-            background: "#ffffff",
-            foreground: "#18181b",
-            cursor: "#09090b",
-            black: "#09090b",
-            red: "#dc2626",
-            green: "#16a34a",
-            yellow: "#ca8a04",
-            blue: "#2563eb",
-            magenta: "#9333ea",
-            cyan: "#0891b2",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#ef4444",
-            brightGreen: "#22c55e",
-            brightYellow: "#eab308",
-            brightBlue: "#3b82f6",
-            brightMagenta: "#a855f7",
-            brightCyan: "#06b6d4",
-            brightWhite: "#ffffff",
-          };
+          background: "#ffffff",
+          foreground: "#18181b",
+          cursor: "#09090b",
+          black: "#09090b",
+          red: "#dc2626",
+          green: "#16a34a",
+          yellow: "#ca8a04",
+          blue: "#2563eb",
+          magenta: "#9333ea",
+          cyan: "#0891b2",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#ef4444",
+          brightGreen: "#22c55e",
+          brightYellow: "#eab308",
+          brightBlue: "#3b82f6",
+          brightMagenta: "#a855f7",
+          brightCyan: "#06b6d4",
+          brightWhite: "#ffffff",
+        };
     };
 
     // Watch for theme changes
@@ -225,9 +225,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = process.env.NEXT_PUBLIC_API_URL
         ? process.env.NEXT_PUBLIC_API_URL.replace(/^https?:\/\//, "").replace(
-            /\/$/,
-            ""
-          )
+          /\/$/,
+          ""
+        )
         : window.location.hostname + ":8080";
       const wsUrl = sessionId
         ? `${protocol}//${host}/api/v1/ws?session_id=${sessionId}&reconnect=true`
@@ -256,7 +256,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
               setCurrentSessionId(data.session_id);
               setIsLoading(false);
               if (onConnect) {
-                onConnect(data.session_id);
+                onConnect(data.session_id, data.pod_name);
               }
               return;
             }
@@ -268,7 +268,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
         // Terminal data - write to terminal (no output detection for stability)
         if (xtermRef.current) {
           setIsLoading(false);
-          
+
           if (typeof event.data === "string") {
             xtermRef.current.write(event.data);
           } else if (event.data instanceof ArrayBuffer) {
@@ -290,10 +290,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
         // Log for debugging only (less noisy than console.error)
         // Actual error details will be in onclose handler
         if (process.env.NODE_ENV === "development") {
-          const readyStateText = ws.readyState === WebSocket.CONNECTING ? "CONNECTING" : 
-                                ws.readyState === WebSocket.OPEN ? "OPEN" :
-                                ws.readyState === WebSocket.CLOSING ? "CLOSING" :
-                                ws.readyState === WebSocket.CLOSED ? "CLOSED" : "UNKNOWN";
+          const readyStateText = ws.readyState === WebSocket.CONNECTING ? "CONNECTING" :
+            ws.readyState === WebSocket.OPEN ? "OPEN" :
+              ws.readyState === WebSocket.CLOSING ? "CLOSING" :
+                ws.readyState === WebSocket.CLOSED ? "CLOSED" : "UNKNOWN";
           console.warn(
             `[WebSocket] Connection error. URL: ${wsUrl}, State: ${readyStateText} (${ws.readyState})`
           );
@@ -305,7 +305,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
         connectingRef.current = false;
         setIsConnecting(false);
         setIsLoading(false);
-        
+
         // Log connection closure details (only in development)
         if (process.env.NODE_ENV === "development") {
           console.log("[WebSocket] Connection closed:", {
@@ -315,12 +315,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
             url: wsUrl,
           });
         }
-        
+
         // Provide detailed error information based on close code
         // Only report errors for abnormal closures (not normal shutdowns)
         if (event.code !== 1000 && event.code !== 1001) {
           let errorMessage = "";
-          
+
           switch (event.code) {
             case 1006:
               errorMessage = `Unable to connect to backend server at ${host}. Please ensure the backend is running (try: make dev or start the backend server on port 8080).`;
@@ -340,11 +340,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
             default:
               errorMessage = `Connection closed unexpectedly (code: ${event.code})${event.reason ? `: ${event.reason}` : ""}`;
           }
-          
+
           if (errorMessage && onError) {
             onError(errorMessage);
           }
-          
+
           if (onDisconnect) {
             onDisconnect();
           }
@@ -366,19 +366,19 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
           // Enter pressed - use what user typed (currentLine)
           // Only read from buffer if currentLine is empty (arrow key history)
           let command = currentLine.trim();
-          
+
           // If nothing typed, try reading from buffer (arrow keys used)
           if (!command && xtermRef.current) {
             try {
               const buffer = xtermRef.current.buffer.active;
               // Use absolute position: baseY + cursorY
               const absoluteY = buffer.baseY + buffer.cursorY;
-              
+
               // Search current line and a few lines back for a prompt with command
               for (let offset = 0; offset <= 3; offset++) {
                 const lineNum = absoluteY - offset;
                 if (lineNum < 0) break;
-                
+
                 const lineData = buffer.getLine(lineNum);
                 if (lineData) {
                   const bufferLine = lineData.translateToString(true).trim();
@@ -394,14 +394,14 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
               // Buffer read failed, command stays empty
             }
           }
-          
+
           currentLine = "";
-          
+
           // Skip empty commands
           if (!command) {
             return;
           }
-          
+
           // Non-kubectl commands close the popout
           if (!command.startsWith("kubectl")) {
             console.log("[Terminal] Non-kubectl command detected:", command, "- closing popout");
@@ -410,9 +410,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
             }
             return;
           }
-          
+
           console.log("[Terminal] kubectl command detected:", command);
-          
+
           // Check if it's a kubectl get pods command
           const kubectlGetPodsMatch = command.match(/^kubectl\s+get\s+(?:po|pod|pods)(?:\s+.*)?$/i);
           if (kubectlGetPodsMatch && onCommandDetectedRef.current) {
@@ -424,22 +424,22 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
               }
               return;
             }
-            
+
             // Extract namespace - simple patterns
             let namespace = "default";
-            const nMatch = command.match(/-n\s+([^\s]+)/i) || 
-                          command.match(/--namespace[=\s]+([^\s]+)/i);
+            const nMatch = command.match(/-n\s+([^\s]+)/i) ||
+              command.match(/--namespace[=\s]+([^\s]+)/i);
             if (nMatch && nMatch[1]) {
               namespace = nMatch[1].trim();
             }
-            
+
             const commandKey = `kubectl-get-pods-${namespace}`;
             console.log("[Terminal] Opening pod list for namespace:", namespace);
             lastDetectedCommandRef.current = commandKey;
             onCommandDetectedRef.current("kubectl get pods", namespace);
             return;
           }
-          
+
           // Check if it's a kubectl get nodes command
           const kubectlGetNodesMatch = command.match(/^kubectl\s+get\s+(?:no|node|nodes)(?:\s+.*)?$/i);
           if (kubectlGetNodesMatch && onCommandDetectedRef.current) {
@@ -449,7 +449,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
             onCommandDetectedRef.current("kubectl get nodes");
             return;
           }
-          
+
           // Any other kubectl command - close popouts
           console.log("[Terminal] Other kubectl command - closing popouts");
           if (onCommandCloseRef.current) {
@@ -500,14 +500,14 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
         wsRef.current = null;
         setIsConnecting(false);
         setIsLoading(false);
-        
+
         // Clear terminal and show disconnected message
         if (xtermRef.current) {
           xtermRef.current.clear();
           xtermRef.current.writeln("\r\n\x1b[31mDisconnected\x1b[0m - Connection closed by user.");
           xtermRef.current.writeln("Press Reconnect to establish a new connection.");
         }
-        
+
         if (onDisconnect) {
           onDisconnect();
         }
