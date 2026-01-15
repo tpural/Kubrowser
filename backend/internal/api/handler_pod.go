@@ -65,9 +65,9 @@ func (h *Handlers) HandleListPods(c *gin.Context) {
 	}
 
 	h.logger.WithFields(logrus.Fields{
-		"namespace":        namespace,
-		"list_namespace":   listNamespace,
-		"pods_count":       len(pods.Items),
+		"namespace":      namespace,
+		"list_namespace": listNamespace,
+		"pods_count":     len(pods.Items),
 	}).Info("Successfully listed pods")
 
 	podList := make([]gin.H, 0, len(pods.Items))
@@ -83,12 +83,18 @@ func (h *Handlers) HandleListPods(c *gin.Context) {
 		}
 
 		podList = append(podList, gin.H{
-			"name":      pod.Name,
-			"namespace": pod.Namespace,
-			"status":    status,
-			"ready":     ready,
-			"age":       time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
-			"restarts":  getRestartCount(&pod),
+			"name":        pod.Name,
+			"namespace":   pod.Namespace,
+			"status":      status,
+			"ready":       ready,
+			"age":         time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
+			"restarts":    getRestartCount(&pod),
+			"node":        pod.Spec.NodeName,
+			"podIP":       pod.Status.PodIP,
+			"qosClass":    string(pod.Status.QOSClass),
+			"labels":      pod.Labels,
+			"annotations": pod.Annotations,
+			"containers":  getContainerInfo(&pod),
 		})
 	}
 
@@ -161,7 +167,7 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 	containerName := c.DefaultQuery("container", "")
 	tailLines := c.DefaultQuery("tail", "100")
 	follow := c.DefaultQuery("follow", "true") == "true"
-	
+
 	ctx := c.Request.Context()
 	if !follow {
 		// For non-following logs, use a timeout
@@ -213,7 +219,7 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.Header("Cache-Control", "no-cache")
-	
+
 	// Stream logs to response
 	buf := make([]byte, 4096)
 	for {
@@ -283,7 +289,7 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 		"pod":       podName,
 		"namespace": namespace,
 	}).Info("Fetching pod information")
-	
+
 	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get pod")
@@ -344,13 +350,13 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 			"namespace": namespace,
 			"container": containerName,
 		}).Error("Exec stream error")
-		
+
 		// Provide user-friendly error messages
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "no such file or directory") || strings.Contains(errMsg, "exec:") || strings.Contains(errMsg, "no shell found") {
 			errMsg = fmt.Sprintf("Container has no shell (image: %s). Use 'kubectl debug' for distroless containers.", containerImage)
 		}
-		
+
 		// Send clean error message to client before closing
 		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Exec error: %s", errMsg)))
 	} else {
@@ -360,4 +366,41 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 			"container": containerName,
 		}).Info("Exec stream completed successfully")
 	}
+}
+
+func getContainerInfo(pod *v1.Pod) []gin.H {
+	containers := make([]gin.H, 0, len(pod.Spec.Containers))
+	for _, c := range pod.Spec.Containers {
+		restartCount := int32(0)
+		state := "Unknown"
+
+		// Find status for this container
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.Name == c.Name {
+				restartCount = status.RestartCount
+				if status.State.Running != nil {
+					state = "Running"
+				} else if status.State.Waiting != nil {
+					state = "Waiting"
+					if status.State.Waiting.Reason != "" {
+						state = fmt.Sprintf("Waiting (%s)", status.State.Waiting.Reason)
+					}
+				} else if status.State.Terminated != nil {
+					state = "Terminated"
+					if status.State.Terminated.Reason != "" {
+						state = fmt.Sprintf("Terminated (%s)", status.State.Terminated.Reason)
+					}
+				}
+				break
+			}
+		}
+
+		containers = append(containers, gin.H{
+			"name":     c.Name,
+			"image":    c.Image,
+			"restarts": restartCount,
+			"state":    state,
+		})
+	}
+	return containers
 }
