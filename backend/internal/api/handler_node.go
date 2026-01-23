@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,8 +11,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 )
+
+// NodeMetrics structs for parsing metrics.k8s.io response
+type NodeMetricsList struct {
+	Items []struct {
+		Metadata struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
+		Usage struct {
+			CPU    string `json:"cpu"`
+			Memory string `json:"memory"`
+		} `json:"usage"`
+	} `json:"items"`
+}
 
 // HandleListNodes lists all Kubernetes nodes.
 func (h *Handlers) HandleListNodes(c *gin.Context) {
@@ -26,6 +44,55 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 	}
 
 	h.logger.WithField("nodes_count", len(nodes.Items)).Info("Successfully listed nodes")
+
+	// Fetch metrics
+	metricsMap := make(map[string]map[string]string)
+
+	// Create a REST client for metrics
+	config := h.podManager.GetConfig()
+	if config != nil {
+		metricsConfig := *config
+		metricsConfig.GroupVersion = &schema.GroupVersion{Group: "metrics.k8s.io", Version: "v1beta1"}
+		metricsConfig.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
+		metricsConfig.APIPath = "/apis"
+
+		metricsClient, err := rest.RESTClientFor(&metricsConfig)
+		if err == nil {
+			data, err := metricsClient.Get().Resource("nodes").DoRaw(ctx)
+			if err == nil {
+				var metricsList NodeMetricsList
+				if err := json.Unmarshal(data, &metricsList); err == nil {
+					for _, item := range metricsList.Items {
+						// Parse CPU
+						cpuStr := "0"
+						if cpuQ, err := resource.ParseQuantity(item.Usage.CPU); err == nil {
+							// Convert to cores (float)
+							cpuStr = fmt.Sprintf("%.2f", float64(cpuQ.MilliValue())/1000.0)
+						}
+
+						// Parse Memory
+						memStr := "0"
+						if memQ, err := resource.ParseQuantity(item.Usage.Memory); err == nil {
+							// Convert to GB
+							memGB := float64(memQ.Value()) / (1024 * 1024 * 1024)
+							memStr = fmt.Sprintf("%.2f GB", memGB)
+						}
+
+						metricsMap[item.Metadata.Name] = map[string]string{
+							"cpu":    cpuStr,
+							"memory": memStr,
+						}
+					}
+				} else {
+					h.logger.WithError(err).Warn("Failed to unmarshal node metrics")
+				}
+			} else {
+				h.logger.WithError(err).Warn("Failed to fetch node metrics")
+			}
+		} else {
+			h.logger.WithError(err).Warn("Failed to create metrics client")
+		}
+	}
 
 	nodeList := make([]gin.H, 0, len(nodes.Items))
 	for _, node := range nodes.Items {
@@ -123,6 +190,14 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 		memoryCapacityGB := float64(memoryCapacity.Value()) / (1024 * 1024 * 1024)
 		memoryAllocatableGB := float64(memoryAllocatable.Value()) / (1024 * 1024 * 1024)
 
+		// Get Usage if available
+		cpuUsage := "0"
+		memoryUsage := "0"
+		if metrics, ok := metricsMap[node.Name]; ok {
+			cpuUsage = metrics["cpu"]
+			memoryUsage = metrics["memory"]
+		}
+
 		// Get labels
 		labels := make(map[string]string)
 		if node.Labels != nil {
@@ -141,7 +216,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 		if role == "" {
 			role = "worker"
 		}
-		
+
 		nodeList = append(nodeList, gin.H{
 			"name":              node.Name,
 			"status":            status,
@@ -152,18 +227,20 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			"uptime":            uptimeStr,
 			"kubeletVersion":    kubeletVersion,
 			"osImage":           osImage,
-			"containerRuntime": containerRuntime,
+			"containerRuntime":  containerRuntime,
 			"architecture":      architecture,
 			"operatingSystem":   operatingSystem,
 			"cpuCapacity":       cpuCapacity.String(),
 			"memoryCapacity":    fmt.Sprintf("%.2f GB", memoryCapacityGB),
 			"cpuAllocatable":    cpuAllocatable.String(),
 			"memoryAllocatable": fmt.Sprintf("%.2f GB", memoryAllocatableGB),
+			"cpuUsage":          cpuUsage,
+			"memoryUsage":       memoryUsage,
 			"labels":            labels,
 			"taints":            taints,
 			"age":               time.Since(node.CreationTimestamp.Time).Round(time.Second).String(),
 		})
-		
+
 		// Log role for debugging
 		h.logger.WithFields(logrus.Fields{
 			"node": node.Name,

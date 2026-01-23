@@ -8,8 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  RefreshCw, Server, Cpu, HardDrive, Network, 
+import {
+  RefreshCw, Server, Cpu, HardDrive, Network,
   ChevronDown, ChevronRight, Clock, Container,
   Activity, Zap, MemoryStick
 } from "lucide-react";
@@ -31,6 +31,8 @@ interface Node {
   memoryCapacity: string;
   cpuAllocatable: string;
   memoryAllocatable: string;
+  cpuUsage: string;
+  memoryUsage: string;
   labels: Record<string, string>;
   taints: string[];
   age: string;
@@ -66,16 +68,16 @@ const itemVariants = {
 
 const expandVariants = {
   hidden: { opacity: 0, height: 0 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     height: "auto",
     transition: {
       height: { duration: 0.3 },
       opacity: { duration: 0.2, delay: 0.1 },
     },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     height: 0,
     transition: {
       height: { duration: 0.2 },
@@ -85,27 +87,29 @@ const expandVariants = {
 };
 
 // Resource bar component
-function ResourceBar({ 
-  used, 
-  total, 
-  label, 
-  color = "blue" 
-}: { 
-  used: string; 
-  total: string; 
+function ResourceBar({
+  used,
+  total,
+  label,
+  color = "blue"
+}: {
+  used: string;
+  total: string;
   label: string;
   color?: "blue" | "green" | "purple" | "amber";
 }) {
   // Parse memory values (e.g., "16Gi" -> 16)
-  const parseValue = (val: string): number => {
+  // Parse memory values (e.g., "16Gi" -> 16)
+  const parseValue = (val: string | undefined | null): number => {
+    if (!val) return 0;
     const num = parseFloat(val.replace(/[^0-9.]/g, ''));
     return isNaN(num) ? 0 : num;
   };
-  
+
   const usedNum = parseValue(used);
   const totalNum = parseValue(total);
   const percentage = totalNum > 0 ? Math.min((usedNum / totalNum) * 100, 100) : 0;
-  
+
   const colorClasses = {
     blue: "from-blue-500 to-cyan-400",
     green: "from-emerald-500 to-teal-400",
@@ -266,7 +270,7 @@ export function NodeList({ onClose }: NodeListProps) {
   return (
     <Card className="p-4 h-full flex flex-col glass overflow-hidden">
       {/* Header */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between mb-4"
@@ -279,7 +283,7 @@ export function NodeList({ onClose }: NodeListProps) {
             <span>Kubernetes Nodes</span>
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {nodes.length} node{nodes.length !== 1 ? "s" : ""} • 
+            {nodes.length} node{nodes.length !== 1 ? "s" : ""} •
             {nodes.filter(n => n.ready).length} ready
           </p>
         </div>
@@ -336,9 +340,8 @@ export function NodeList({ onClose }: NodeListProps) {
                   variants={itemVariants}
                   layout
                 >
-                  <Card className={`card-hover overflow-hidden transition-all duration-300 ${
-                    isExpanded ? "ring-2 ring-blue-500/20" : ""
-                  }`}>
+                  <Card className={`card-hover overflow-hidden transition-all duration-300 ${isExpanded ? "ring-2 ring-blue-500/20" : ""
+                    }`}>
                     {/* Header - Always Visible */}
                     <motion.div
                       className="p-3 cursor-pointer flex items-center justify-between gap-2 hover:bg-accent/30 transition-colors"
@@ -393,9 +396,9 @@ export function NodeList({ onClose }: NodeListProps) {
                                   <span>CPU</span>
                                 </div>
                                 <ResourceBar
-                                  used={node.cpuAllocatable}
+                                  used={node.cpuUsage || "0"}
                                   total={node.cpuCapacity}
-                                  label="Allocatable"
+                                  label="Usage"
                                   color="blue"
                                 />
                               </div>
@@ -405,9 +408,9 @@ export function NodeList({ onClose }: NodeListProps) {
                                   <span>Memory</span>
                                 </div>
                                 <ResourceBar
-                                  used={node.memoryAllocatable}
+                                  used={node.memoryUsage || "0"}
                                   total={node.memoryCapacity}
-                                  label="Allocatable"
+                                  label="Usage"
                                   color="purple"
                                 />
                               </div>
