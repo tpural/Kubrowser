@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { useTheme } from "next-themes";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -28,6 +29,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
   onCommandDetected,
   onCommandClose,
 }, ref) => {
+  const { resolvedTheme } = useTheme();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -62,6 +64,56 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(true);
 
+  // Update terminal theme when resolvedTheme changes
+  useEffect(() => {
+    if (!xtermRef.current) return;
+
+    const isDark = resolvedTheme === "dark";
+    xtermRef.current.options.theme = isDark
+      ? {
+        background: "#0a0a0a",
+        foreground: "#e4e4e7",
+        cursor: "#f4f4f5",
+        black: "#18181b",
+        red: "#ef4444",
+        green: "#22c55e",
+        yellow: "#eab308",
+        blue: "#3b82f6",
+        magenta: "#a855f7",
+        cyan: "#06b6d4",
+        white: "#f4f4f5",
+        brightBlack: "#71717a",
+        brightRed: "#f87171",
+        brightGreen: "#4ade80",
+        brightYellow: "#fbbf24",
+        brightBlue: "#60a5fa",
+        brightMagenta: "#c084fc",
+        brightCyan: "#22d3ee",
+        brightWhite: "#ffffff",
+      }
+      : {
+        background: "#fafafa", // zinc-50
+        foreground: "#18181b", // zinc-950
+        cursor: "#18181b",
+        black: "#18181b",
+        red: "#ef4444",
+        green: "#16a34a",
+        yellow: "#ca8a04",
+        blue: "#2563eb",
+        magenta: "#9333ea",
+        cyan: "#0891b2",
+        white: "#f4f4f5",
+        brightBlack: "#71717a",
+        brightRed: "#ef4444",
+        brightGreen: "#22c55e",
+        brightYellow: "#eab308",
+        brightBlue: "#3b82f6",
+        brightMagenta: "#a855f7",
+        brightCyan: "#06b6d4",
+        brightWhite: "#ffffff",
+      };
+  }, [resolvedTheme]);
+
   useEffect(() => {
     if (!terminalRef.current) return;
 
@@ -83,7 +135,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
     connectingRef.current = true;
 
     // Initialize xterm with theme-aware colors
-    const isDark = document.documentElement.classList.contains("dark");
+    const isDark = resolvedTheme === "dark";
     const xterm = new XTerm({
       cursorBlink: true,
       fontSize: 14,
@@ -111,11 +163,11 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
           brightWhite: "#ffffff",
         }
         : {
-          background: "#ffffff",
-          foreground: "#18181b",
-          cursor: "#09090b",
-          black: "#09090b",
-          red: "#dc2626",
+          background: "#fafafa", // zinc-50
+          foreground: "#18181b", // zinc-950
+          cursor: "#18181b",
+          black: "#18181b",
+          red: "#ef4444",
           green: "#16a34a",
           yellow: "#ca8a04",
           blue: "#2563eb",
@@ -140,62 +192,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
 
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
-
-    // Update terminal theme when dark mode changes
-    const updateTerminalTheme = () => {
-      if (!xtermRef.current) return;
-      const isDark = document.documentElement.classList.contains("dark");
-      xtermRef.current.options.theme = isDark
-        ? {
-          background: "#0a0a0a",
-          foreground: "#e4e4e7",
-          cursor: "#f4f4f5",
-          black: "#18181b",
-          red: "#ef4444",
-          green: "#22c55e",
-          yellow: "#eab308",
-          blue: "#3b82f6",
-          magenta: "#a855f7",
-          cyan: "#06b6d4",
-          white: "#f4f4f5",
-          brightBlack: "#71717a",
-          brightRed: "#f87171",
-          brightGreen: "#4ade80",
-          brightYellow: "#fbbf24",
-          brightBlue: "#60a5fa",
-          brightMagenta: "#c084fc",
-          brightCyan: "#22d3ee",
-          brightWhite: "#ffffff",
-        }
-        : {
-          background: "#ffffff",
-          foreground: "#18181b",
-          cursor: "#09090b",
-          black: "#09090b",
-          red: "#dc2626",
-          green: "#16a34a",
-          yellow: "#ca8a04",
-          blue: "#2563eb",
-          magenta: "#9333ea",
-          cyan: "#0891b2",
-          white: "#f4f4f5",
-          brightBlack: "#71717a",
-          brightRed: "#ef4444",
-          brightGreen: "#22c55e",
-          brightYellow: "#eab308",
-          brightBlue: "#3b82f6",
-          brightMagenta: "#a855f7",
-          brightCyan: "#06b6d4",
-          brightWhite: "#ffffff",
-        };
-    };
-
-    // Watch for theme changes
-    const observer = new MutationObserver(updateTerminalTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
 
     // Handle window resize
     const handleResize = () => {
@@ -476,7 +472,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
       initializedRef.current = false;
       connectingRef.current = false;
       window.removeEventListener("resize", handleResize);
-      observer.disconnect();
+      // observer is removed, no need to disconnect
       if (wsRef.current) {
         wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;

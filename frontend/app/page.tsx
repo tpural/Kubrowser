@@ -168,7 +168,7 @@ export default function Home() {
               </div>
 
               {/* Terminal Content */}
-              <div className="flex-1 overflow-hidden p-4 bg-black/90 relative">
+              <div className="flex-1 overflow-hidden p-4 bg-background relative">
                 {/* Error Overlay */}
                 <AnimatePresence>
                   {error && (
