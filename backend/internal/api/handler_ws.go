@@ -53,19 +53,19 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 		// Track start time
 		startTime := time.Now()
 
-		// Get username from query parameter or header (for now)
-		// TODO: Get from authentication token when auth is implemented
-		username := c.Query("username")
-		if username == "" {
-			username = c.GetHeader("X-Username")
-		}
-		if username == "" {
+		// Get username from authentication context
+		username, exists := c.Get("user")
+		if !exists {
+			// This shouldn't happen since auth middleware sets it, but fallback just in case
 			username = "anonymous"
 		}
+		usernameStr, ok := username.(string)
+		if !ok {
+			usernameStr = "anonymous"
+		}
 
-		// Create new session with status updates
 		newSessionID := generateSessionID()
-		pod, err := h.podManager.CreatePodWithStatus(c.Request.Context(), newSessionID, username, startTime, func(status string) {
+		pod, err := h.podManager.CreatePodWithStatus(c.Request.Context(), newSessionID, usernameStr, startTime, func(status string) {
 			sendStatusUpdate(status)
 		})
 		if err != nil {
@@ -76,7 +76,7 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 			return
 		}
 
-		sess = h.sessionMgr.CreateSession(pod.Name, username)
+		sess = h.sessionMgr.CreateSession(pod.Name, usernameStr)
 		sessionID = sess.ID
 
 		// Calculate total duration
