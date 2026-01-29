@@ -54,17 +54,14 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 		return nil
 	})
 
-	// Try multiple shell paths in order of likelihood
-	// This handles different container types:
-	// - Standard containers: /bin/sh or sh
-	// - Alpine: /bin/sh or /usr/bin/sh
-	// - Debian/Ubuntu: /bin/bash or /bin/sh
-	// - Distroless: may have sh in PATH
+	// Try multiple shell paths in order of preference
+	// Prioritizing bash since the pod is configured to use it
 	shellPaths := []string{
-		"sh",           // Try PATH first (works for most)
-		"/bin/sh",      // Most common location
-		"/bin/bash",    // Bash-based images
-		"/usr/bin/sh",  // Some Alpine variants
+		"/bin/bash",     // Preferred shell (configured in pod)
+		"bash",          // Try PATH first
+		"sh",            // Fallback to sh
+		"/bin/sh",       // Most common location
+		"/usr/bin/sh",   // Some Alpine variants
 		"/usr/bin/bash", // Some distributions
 	}
 
@@ -115,7 +112,7 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 		select {
 		case err = <-execDone:
 			// Check if this is a "shell not found" error
-			if err != nil && (strings.Contains(err.Error(), "no such file") || 
+			if err != nil && (strings.Contains(err.Error(), "no such file") ||
 				strings.Contains(err.Error(), "exec:") ||
 				strings.Contains(err.Error(), "stat /")) {
 				// This shell path doesn't exist, try the next one
@@ -154,10 +151,10 @@ func (e *Executor) pingTicker(ws *websocket.Conn) {
 
 // stdinStream reads from WebSocket and writes to stdin.
 type stdinStream struct {
-	ws           *websocket.Conn
-	sessionSent  bool
-	buffer       []byte
-	ctx          context.Context
+	ws          *websocket.Conn
+	sessionSent bool
+	buffer      []byte
+	ctx         context.Context
 }
 
 func (s *stdinStream) Read(p []byte) (int, error) {
@@ -186,7 +183,7 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 		// Set a longer read deadline - we want to wait for input, not timeout quickly
 		// The executor will call Read() when it needs input, so we should wait
 		s.ws.SetReadDeadline(time.Now().Add(pongWait))
-		
+
 		messageType, message, err := s.ws.ReadMessage()
 		if err != nil {
 			// Check if context was canceled
@@ -228,10 +225,10 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 			}
 			return 0, err
 		}
-		
+
 		// Reset deadline after successful read
 		s.ws.SetReadDeadline(time.Time{})
-		
+
 		// Skip the first text message if it looks like session info JSON
 		if messageType == websocket.TextMessage && !s.sessionSent {
 			if len(message) > 0 && message[0] == '{' && len(message) < 200 {
@@ -240,7 +237,7 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 				continue
 			}
 		}
-		
+
 		// Process both text (from xterm) and binary messages as terminal input
 		if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
 			n := copy(p, message)

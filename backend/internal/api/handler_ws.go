@@ -211,7 +211,7 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 		}
 	}()
 
-	containerName := "kubectl"
+	containerName := "terminal"
 
 	// Check if pod is still running before exec
 	pod, err := h.podManager.GetPod(ctx, sess.PodName)
@@ -302,7 +302,7 @@ func (h *Handlers) HandleResize(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	if err := h.terminalExec.ResizeTerminal(ctx, sess.PodName, "kubectl", req.Width, req.Height); err != nil {
+	if err := h.terminalExec.ResizeTerminal(ctx, sess.PodName, "terminal", req.Width, req.Height); err != nil {
 		h.logger.WithError(err).Error("Failed to resize terminal")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resize terminal"})
 		return

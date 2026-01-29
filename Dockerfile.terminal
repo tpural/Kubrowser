@@ -1,0 +1,37 @@
+# Kubrowser Terminal Image
+#
+# A custom image for Kubrowser terminal sessions with:
+# - Proper user handling (username passed via env var)
+# - Bash shell with custom prompt
+# - kubectl and common tools pre-installed
+
+FROM alpine:3.19
+
+# Install essential tools
+RUN apk add --no-cache \
+    bash \
+    curl \
+    git \
+    jq \
+    vim \
+    openssh-client \
+    ca-certificates \
+    shadow \
+    su-exec \
+    && rm -rf /var/cache/apk/*
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/
+
+# Copy entrypoint script
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Default environment
+ENV KUBROWSER_USER=kubrowser
+ENV SHELL=/bin/bash
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["sleep", "infinity"]

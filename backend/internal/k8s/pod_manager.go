@@ -151,6 +151,15 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		}
 	}
 
+	// Create PVC for user's home directory if it doesn't exist
+	pvcName := fmt.Sprintf("kubrowser-home-%s", sanitizedUsername)
+	if err := pm.ensureHomePVC(ctx, pvcName, sanitizedUsername, statusCallback); err != nil {
+		if statusCallback != nil {
+			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[31m[✗] Failed to create home storage: %v\x1b[0m\r\n", err))
+		}
+		return nil, fmt.Errorf("failed to create home PVC: %w", err)
+	}
+
 	// Check if a pod with this name already exists and reuse it if possible
 	existingPod, err := pm.FindExistingPod(ctx, username)
 	if err == nil && existingPod != nil {
@@ -243,28 +252,14 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 			ServiceAccountName: pm.serviceAccount,
 			Containers: []v1.Container{
 				{
-					Name:  "kubectl",
-					Image: pm.image,
-					// Keep container running
-					// Create a user entry in /etc/passwd to prevent "I have no name!" message
-					Command: []string{"/bin/sh", "-c"},
-					Args: []string{
-						"echo 'kubrowser:x:1000:1000:Kubrowser User:/home/kubrowser:/bin/bash' >> /etc/passwd 2>/dev/null || true; " +
-							"mkdir -p /home/kubrowser 2>/dev/null || true; " +
-							"trap 'exit 0' SIGTERM; while true; do sleep 30; done",
-					},
+					Name:            "terminal",
+					Image:           pm.image,
+					ImagePullPolicy: v1.PullIfNotPresent,
+					// The entrypoint.sh in the custom image handles user creation
 					Env: []v1.EnvVar{
 						{
-							Name:  "USER",
-							Value: "kubrowser",
-						},
-						{
-							Name:  "HOME",
-							Value: "/home/kubrowser",
-						},
-						{
-							Name:  "PS1",
-							Value: "kubrowser:\\w\\$ ",
+							Name:  "KUBROWSER_USER",
+							Value: sanitizedUsername,
 						},
 					},
 					Resources: v1.ResourceRequirements{
@@ -277,11 +272,20 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 							v1.ResourceMemory: memoryQuantity,
 						},
 					},
-					SecurityContext: &v1.SecurityContext{
-						RunAsNonRoot: func() *bool { b := true; return &b }(),
-						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
-						Capabilities: &v1.Capabilities{
-							Drop: []v1.Capability{"ALL"},
+					VolumeMounts: []v1.VolumeMount{
+						{
+							Name:      "home",
+							MountPath: fmt.Sprintf("/home/%s", sanitizedUsername),
+						},
+					},
+				},
+			},
+			Volumes: []v1.Volume{
+				{
+					Name: "home",
+					VolumeSource: v1.VolumeSource{
+						PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
+							ClaimName: fmt.Sprintf("kubrowser-home-%s", sanitizedUsername),
 						},
 					},
 				},
@@ -388,6 +392,61 @@ func (pm *PodManager) DeletePod(ctx context.Context, podName string) error {
 			return nil // Pod already deleted, treat as success
 		}
 		return err
+	}
+
+	return nil
+}
+
+// ensureHomePVC creates a PersistentVolumeClaim for the user's home directory if it doesn't exist.
+func (pm *PodManager) ensureHomePVC(ctx context.Context, pvcName, username string, statusCallback StatusCallback) error {
+	// Check if PVC already exists
+	_, err := pm.client.CoreV1().PersistentVolumeClaims(pm.namespace).Get(ctx, pvcName, metav1.GetOptions{})
+	if err == nil {
+		// PVC already exists
+		if statusCallback != nil {
+			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Home storage ready for %s\x1b[0m\r\n", username))
+		}
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check existing PVC: %w", err)
+	}
+
+	if statusCallback != nil {
+		statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Creating home storage for %s...\x1b[0m", username))
+	}
+
+	// Create PVC
+	storageSize := resource.MustParse("1Gi")
+	pvc := &v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: pm.namespace,
+			Labels: map[string]string{
+				"app":        "kubrowser",
+				"username":   username,
+				"managed-by": "kubrowser-backend",
+			},
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
+			Resources: v1.VolumeResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceStorage: storageSize,
+				},
+			},
+		},
+	}
+
+	_, err = pm.client.CoreV1().PersistentVolumeClaims(pm.namespace).Create(ctx, pvc, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to create PVC: %w", err)
+	}
+
+	if statusCallback != nil {
+		statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Home storage created for %s\x1b[0m\r\n", username))
 	}
 
 	return nil

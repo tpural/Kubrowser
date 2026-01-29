@@ -1,4 +1,4 @@
-.PHONY: help install lint lint-fix format format-check test build clean dev backend-lint frontend-lint frontend-format
+.PHONY: help install lint lint-fix format format-check test build build-terminal-image clean dev backend-lint frontend-lint frontend-format
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -62,6 +62,11 @@ build: ## Build backend and frontend
 	cd backend && go build -o bin/server ./cmd/server
 	@echo "Building frontend..."
 	cd frontend && npm run build
+
+build-terminal-image: ## Build the custom terminal Docker image
+	@echo "Building terminal image..."
+	docker build -f Dockerfile.terminal -t kubrowser-terminal:latest .
+	@echo "Terminal image built: kubrowser-terminal:latest"
 
 clean: ## Clean build artifacts
 	rm -rf backend/bin
