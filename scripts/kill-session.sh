@@ -29,7 +29,7 @@ if [[ "$IDENTIFIER" == kubrowser-session-* ]]; then
 else
     # Try to find pod by session-id label
     POD_NAME=$(kubectl get pods -n "$NAMESPACE" -l "app=kubrowser,session-id=$IDENTIFIER" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-    
+
     # If not found, try as pod name anyway
     if [ -z "$POD_NAME" ]; then
         POD_NAME="$IDENTIFIER"

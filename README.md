@@ -22,19 +22,21 @@ A browser-based terminal tool that allows you to access kubectl through temporar
 ### Local Development
 
 1. **Install dependencies**
+
    ```bash
    # Backend
    cd backend && go mod download
-   
+
    # Frontend
    cd frontend && npm install
    ```
 
 2. **Start development servers**
+
    ```bash
    make dev
    ```
-   
+
    This starts both the backend (port 8080) and frontend (port 3000).
 
 3. **Access the application**

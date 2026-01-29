@@ -24,9 +24,6 @@ const (
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer.
-	maxMessageSize = 512
 )
 
 // Executor handles terminal command execution via Kubernetes Exec API.
@@ -47,27 +44,26 @@ func NewExecutor(client kubernetes.Interface, config *rest.Config, namespace str
 
 // StreamTerminal streams terminal I/O between WebSocket and Kubernetes pod.
 func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podName, containerName string) error {
-	// Set WebSocket options
-	ws.SetReadDeadline(time.Now().Add(pongWait))
+	// Set WebSocket options.
+	_ = ws.SetReadDeadline(time.Now().Add(pongWait))
 	ws.SetPongHandler(func(string) error {
-		ws.SetReadDeadline(time.Now().Add(pongWait))
+		_ = ws.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
 
-	// Try multiple shell paths in order of preference
-	// Prioritizing bash since the pod is configured to use it
+	// Prioritizing bash since the pod is configured to use it.
 	shellPaths := []string{
-		"/bin/bash",     // Preferred shell (configured in pod)
-		"bash",          // Try PATH first
-		"sh",            // Fallback to sh
-		"/bin/sh",       // Most common location
-		"/usr/bin/sh",   // Some Alpine variants
-		"/usr/bin/bash", // Some distributions
+		"/bin/bash",     // Preferred shell (configured in pod).
+		"bash",          // Try PATH first.
+		"sh",            // Fallback to sh.
+		"/bin/sh",       // Most common location.
+		"/usr/bin/sh",   // Some Alpine variants.
+		"/usr/bin/bash", // Some distributions.
 	}
 
 	var lastErr error
 	for _, shellPath := range shellPaths {
-		// Create exec request with current shell path
+		// Create exec request with current shell path.
 		req := e.client.CoreV1().RESTClient().Post().
 			Resource("pods").
 			Name(podName).
@@ -88,16 +84,15 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 			continue
 		}
 
-		// Create streams
+		// Create streams.
 		stdin := &stdinStream{ws: ws, sessionSent: false, buffer: nil, ctx: ctx}
 		stdout := &stdoutStream{ws: ws}
 		stderr := stdout
 
-		// Start ping goroutine
+		// Start ping goroutine.
 		go e.pingTicker(ws)
 
-		// Execute - this will block until the stream ends
-		// Use a goroutine to detect if it hangs
+		// Use a goroutine to detect if it hangs.
 		execDone := make(chan error, 1)
 		go func() {
 			execDone <- executor.StreamWithContext(ctx, remotecommand.StreamOptions{
@@ -108,26 +103,26 @@ func (e *Executor) StreamTerminal(ctx context.Context, ws *websocket.Conn, podNa
 			})
 		}()
 
-		// Wait for exec to complete or context to be canceled
+		// Wait for exec to complete or context to be canceled.
 		select {
 		case err = <-execDone:
-			// Check if this is a "shell not found" error
+			// Check if this is a "shell not found" error.
 			if err != nil && (strings.Contains(err.Error(), "no such file") ||
 				strings.Contains(err.Error(), "exec:") ||
 				strings.Contains(err.Error(), "stat /")) {
-				// This shell path doesn't exist, try the next one
+				// This shell path doesn't exist, try the next one.
 				lastErr = err
 				continue
 			}
-			// Either success or a different error - return it
+			// Either success or a different error - return it.
 			return err
 		case <-ctx.Done():
-			// Context was canceled (client disconnected)
+			// Context was canceled (client disconnected).
 			return ctx.Err()
 		}
 	}
 
-	// If we get here, all shell paths failed
+	// If we get here, all shell paths failed.
 	if lastErr != nil {
 		return fmt.Errorf("no shell found in container (tried: %v). %w\n\n"+
 			"Note: Distroless/minimal containers may not have a shell.\n"+
@@ -151,21 +146,21 @@ func (e *Executor) pingTicker(ws *websocket.Conn) {
 
 // stdinStream reads from WebSocket and writes to stdin.
 type stdinStream struct {
-	ws          *websocket.Conn
-	sessionSent bool
-	buffer      []byte
 	ctx         context.Context
+	ws          *websocket.Conn
+	buffer      []byte
+	sessionSent bool
 }
 
 func (s *stdinStream) Read(p []byte) (int, error) {
-	// Check if context is canceled (browser disconnected)
+	// Check if context is canceled (browser disconnected).
 	select {
 	case <-s.ctx.Done():
 		return 0, io.EOF
 	default:
 	}
 
-	// First, drain any buffered data
+	// First, drain any buffered data.
 	if len(s.buffer) > 0 {
 		n := copy(p, s.buffer)
 		s.buffer = s.buffer[n:]
@@ -173,48 +168,47 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 	}
 
 	for {
-		// Check context before each read
+		// Check context before each read.
 		select {
 		case <-s.ctx.Done():
 			return 0, io.EOF
 		default:
 		}
 
-		// Set a longer read deadline - we want to wait for input, not timeout quickly
-		// The executor will call Read() when it needs input, so we should wait
-		s.ws.SetReadDeadline(time.Now().Add(pongWait))
+		// The executor will call Read() when it needs input, so we should wait.
+		_ = s.ws.SetReadDeadline(time.Now().Add(pongWait))
 
 		messageType, message, err := s.ws.ReadMessage()
 		if err != nil {
-			// Check if context was canceled
+			// Check if context was canceled.
 			if s.ctx.Err() != nil {
 				return 0, io.EOF
 			}
-			// Check if it's a close error (browser disconnected)
+			// Check if it's a close error (browser disconnected).
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				return 0, io.EOF
 			}
-			// Any read error from WebSocket likely means connection is closed
+			// Any read error from WebSocket likely means connection is closed.
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				return 0, io.EOF
 			}
-			// For timeout errors, check context and continue if not canceled
+			// For timeout errors, check context and continue if not canceled.
 			if websocket.IsUnexpectedCloseError(err) {
-				// Check context before continuing
+				// Check context before continuing.
 				select {
 				case <-s.ctx.Done():
 					return 0, io.EOF
 				default:
-					// Reset deadline and continue waiting
-					s.ws.SetReadDeadline(time.Time{})
+					// Reset deadline and continue waiting.
+					_ = s.ws.SetReadDeadline(time.Time{})
 					continue
 				}
 			}
-			// For other errors, check if it's a network/connection error
+			// For other errors, check if it's a network/connection error.
 			if err == io.EOF || err.Error() == "use of closed network connection" {
 				return 0, io.EOF
 			}
-			// For timeout, check context and continue if not canceled
+			// For timeout, check context and continue if not canceled.
 			if err.Error() == "i/o timeout" {
 				select {
 				case <-s.ctx.Done():
@@ -226,23 +220,23 @@ func (s *stdinStream) Read(p []byte) (int, error) {
 			return 0, err
 		}
 
-		// Reset deadline after successful read
-		s.ws.SetReadDeadline(time.Time{})
+		// Reset deadline after successful read.
+		_ = s.ws.SetReadDeadline(time.Time{})
 
-		// Skip the first text message if it looks like session info JSON
+		// Skip the first text message if it looks like session info JSON.
 		if messageType == websocket.TextMessage && !s.sessionSent {
 			if len(message) > 0 && message[0] == '{' && len(message) < 200 {
-				// Likely session info, skip it and mark as sent
+				// Likely session info, skip it and mark as sent.
 				s.sessionSent = true
 				continue
 			}
 		}
 
-		// Process both text (from xterm) and binary messages as terminal input
+		// Process both text (from xterm) and binary messages as terminal input.
 		if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
 			n := copy(p, message)
 			if n < len(message) {
-				// Buffer remaining data for next read
+				// Buffer remaining data for next read.
 				s.buffer = message[n:]
 			}
 			return n, nil
@@ -259,8 +253,8 @@ func (s *stdoutStream) Write(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	s.ws.SetWriteDeadline(time.Now().Add(writeWait))
-	// Send as binary message for terminal output
+	_ = s.ws.SetWriteDeadline(time.Now().Add(writeWait))
+	// Send as binary message for terminal output.
 	if err := s.ws.WriteMessage(websocket.BinaryMessage, p); err != nil {
 		return 0, err
 	}
@@ -290,8 +284,8 @@ func (e *Executor) ResizeTerminal(ctx context.Context, podName, containerName st
 
 	return executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		TerminalSizeQueue: &terminalSizeQueue{
-			width:  int(width),
-			height: int(height),
+			width:  width,
+			height: height,
 		},
 		Tty: true,
 	})
@@ -299,8 +293,8 @@ func (e *Executor) ResizeTerminal(ctx context.Context, podName, containerName st
 
 // terminalSizeQueue implements remotecommand.TerminalSizeQueue.
 type terminalSizeQueue struct {
-	width  int
-	height int
+	width  uint16
+	height uint16
 	sent   bool
 }
 
@@ -310,8 +304,8 @@ func (t *terminalSizeQueue) Next() *remotecommand.TerminalSize {
 	}
 	t.sent = true
 	return &remotecommand.TerminalSize{
-		Width:  uint16(t.width),
-		Height: uint16(t.height),
+		Width:  t.width,
+		Height: t.height,
 	}
 }
 

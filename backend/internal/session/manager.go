@@ -15,8 +15,8 @@ type Session struct {
 	CreatedAt time.Time
 	LastUsed  time.Time
 	UserID    string
-	Active    bool   // Whether there's an active WebSocket connection
-	ExecLock  bool   // Whether an exec is currently running
+	Active    bool // Whether there's an active WebSocket connection.
+	ExecLock  bool // Whether an exec is currently running.
 }
 
 // Manager handles session tracking and management.
@@ -107,7 +107,7 @@ func (m *Manager) TryLockExec(sessionID string) bool {
 
 	if session, exists := m.sessions[sessionID]; exists {
 		if session.ExecLock {
-			return false // Already locked
+			return false // Already locked.
 		}
 		session.ExecLock = true
 		return true
@@ -134,7 +134,7 @@ func (m *Manager) CleanupStaleSessions(ctx context.Context, shouldDelete func(se
 	now := time.Now()
 
 	for id, session := range m.sessions {
-		// Don't cleanup active sessions
+		// Don't cleanup active sessions.
 		if session.Active {
 			continue
 		}

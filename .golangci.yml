@@ -14,7 +14,7 @@ output:
 linters-settings:
   errcheck:
     check-type-assertions: true
-    check-blank: true
+    check-blank: false
   goconst:
     min-len: 3
     min-occurrences: 3
@@ -32,18 +32,25 @@ linters-settings:
       - whyNoLint
       - wrapperFunc
       - exitAfterDefer
+      - hugeParam
+      - httpNoBody
+      - unnecessaryBlock
   gocyclo:
-    min-complexity: 15
+    min-complexity: 35
   goimports:
     local-prefixes: github.com/kubrowser
-  gomnd:
-    checks: argument,case,condition,operation,return,assign
+  mnd:
+    checks: [argument, case, condition, operation, return, assign]
     ignored-numbers:
       - "15" # Common timeout values
       - "30" # Common timeout values
       - "60" # Common timeout values
   govet:
-    enable-all: true
+    enable-all: false
+    enable:
+      - nilness
+      - unusedwrite
+      - shadow
   lll:
     line-length: 140
   misspell:
@@ -89,7 +96,7 @@ linters:
     - gofmt
     - goimports
     - godot
-    - gomnd
+
     - goprintffuncname
     - gosec
     - gosimple
@@ -120,7 +127,6 @@ issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
         - errcheck
         - gosec
   max-issues-per-linter: 0

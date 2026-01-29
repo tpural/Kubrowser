@@ -12,10 +12,10 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	Server ServerConfig
-	K8s    K8sConfig
 	Pod    PodConfig
 	Auth   AuthConfig
+	K8s    K8sConfig
+	Server ServerConfig
 }
 
 // AuthConfig holds authentication configuration.
@@ -23,8 +23,8 @@ type AuthConfig struct {
 	GitHubClientID     string
 	GitHubClientSecret string
 	SessionSecret      string
-	AllowedUsers       []string
 	BaseURL            string
+	AllowedUsers       []string
 }
 
 // ServerConfig holds server-related configuration.
@@ -44,12 +44,12 @@ type K8sConfig struct {
 
 // PodConfig holds pod-related configuration.
 type PodConfig struct {
+	ResourceLimits     ResourceLimits
 	Image              string
 	Namespace          string
 	ServiceAccount     string
 	SessionTimeout     time.Duration
 	MaxSessionsPerUser int
-	ResourceLimits     ResourceLimits
 }
 
 // ResourceLimits holds resource limit configuration.
@@ -60,7 +60,7 @@ type ResourceLimits struct {
 
 // Load loads configuration from environment variables with defaults.
 func Load() *Config {
-	// Attempt to load .env file from the current directory or parent directory
+	// Attempt to load .env file from the current directory or parent directory.
 	_ = godotenv.Load()
 	_ = godotenv.Load("../.env")
 
@@ -80,7 +80,7 @@ func Load() *Config {
 			Image:              getEnv("POD_IMAGE", "bitnami/kubectl:latest"),
 			Namespace:          getEnv("POD_NAMESPACE", "default"),
 			ServiceAccount:     getEnv("POD_SERVICE_ACCOUNT", "kubectl-pod"),
-			SessionTimeout:     getDurationEnv("SESSION_TIMEOUT", 60*time.Minute), // Default 1 hour
+			SessionTimeout:     getDurationEnv("SESSION_TIMEOUT", 60*time.Minute), // Default 1 hour.
 			MaxSessionsPerUser: getIntEnv("MAX_SESSIONS_PER_USER", 5),
 			ResourceLimits: ResourceLimits{
 				CPU:    getEnv("POD_CPU_LIMIT", "500m"),
@@ -114,15 +114,15 @@ func getIntEnv(key string, defaultValue int) int {
 }
 
 func getKubeconfigPath() string {
-	// 1. Check KUBECONFIG_PATH (backward compatibility)
+	// 1. Check KUBECONFIG_PATH (backward compatibility).
 	if path := os.Getenv("KUBECONFIG_PATH"); path != "" {
 		return path
 	}
-	// 2. Check standard KUBECONFIG
+	// 2. Check standard KUBECONFIG.
 	if path := os.Getenv("KUBECONFIG"); path != "" {
 		return path
 	}
-	// 3. Fallback to default (~/.kube/config)
+	// 3. Fallback to default (~/.kube/config).
 	return getDefaultKubeconfigPath()
 }
 
@@ -141,7 +141,7 @@ func getDefaultKubeconfigPath() string {
 		return ""
 	}
 	kubeconfigPath := filepath.Join(homeDir, ".kube", "config")
-	// Check if file exists
+	// Check if file exists.
 	if _, err := os.Stat(kubeconfigPath); err == nil {
 		return kubeconfigPath
 	}

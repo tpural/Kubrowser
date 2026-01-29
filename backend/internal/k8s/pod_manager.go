@@ -44,9 +44,9 @@ func NewPodManager(kubeconfigPath, kubeconfigContent, namespace, image, serviceA
 	var err error
 
 	if kubeconfigContent != "" {
-		clientConfig, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfigContent))
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse kubeconfig content: %w", err)
+		clientConfig, cErr := clientcmd.NewClientConfigFromBytes([]byte(kubeconfigContent))
+		if cErr != nil {
+			return nil, fmt.Errorf("failed to parse kubeconfig content: %w", cErr)
 		}
 		config, err = clientConfig.ClientConfig()
 	} else if kubeconfigPath != "" {
@@ -76,49 +76,49 @@ func NewPodManager(kubeconfigPath, kubeconfigContent, namespace, image, serviceA
 	}, nil
 }
 
-// StatusCallback is called to report pod creation status updates
+// StatusCallback is called to report pod creation status updates.
 type StatusCallback func(message string)
 
-// StatusCallbackWithDuration is called to report pod creation status updates with duration
+// StatusCallbackWithDuration is called to report pod creation status updates with duration.
 type StatusCallbackWithDuration func(message string, duration time.Duration)
 
 // sanitizeUsername sanitizes a username to be Kubernetes-compliant.
 // Kubernetes names must be lowercase alphanumeric characters, '-', or '.', and must start/end with alphanumeric.
 // Max length is 63 characters.
 func sanitizeUsername(username string) string {
-	// Default to "anonymous" if empty
+	// Default to "anonymous" if empty.
 	if username == "" {
 		username = "anonymous"
 	}
 
-	// Convert to lowercase
+	// Convert to lowercase.
 	username = strings.ToLower(username)
 
-	// Replace invalid characters with hyphens (keep alphanumeric, dots, and hyphens)
+	// Replace invalid characters with hyphens (keep alphanumeric, dots, and hyphens).
 	re := regexp.MustCompile(`[^a-z0-9.-]`)
 	username = re.ReplaceAllString(username, "-")
 
-	// Remove leading/trailing dots and hyphens
+	// Remove leading/trailing dots and hyphens.
 	username = strings.Trim(username, "-.")
 
-	// Ensure it starts and ends with alphanumeric
-	if len(username) > 0 && !isAlphanumeric(rune(username[0])) {
-		username = "u" + username
+	// Ensure it starts and ends with alphanumeric.
+	if username != "" && !isAlphanumeric(rune(username[0])) {
+		username = "0" + username
 	}
-	if len(username) > 0 && !isAlphanumeric(rune(username[len(username)-1])) {
-		username = username + "0"
+	if username != "" && !isAlphanumeric(rune(username[len(username)-1])) {
+		username += "0"
 	}
 
-	// Truncate to 63 characters (Kubernetes limit)
+	// Truncate to 63 characters (Kubernetes limit).
 	if len(username) > 63 {
 		username = username[:63]
-		// Ensure it still ends with alphanumeric after truncation
+		// Ensure it still ends with alphanumeric after truncation.
 		if !isAlphanumeric(rune(username[len(username)-1])) {
 			username = username[:62] + "0"
 		}
 	}
 
-	// If empty after sanitization, use default
+	// If empty after sanitization, use default.
 	if username == "" {
 		username = "anonymous"
 	}
@@ -140,16 +140,17 @@ func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod,
 // username is sanitized and included in the pod name for easier management.
 // Pod name format: kubrowser-{username}
 // Note: This creates one pod per username. If a pod already exists for this user, it will be deleted first.
-func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, username string, startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
-	// Sanitize username for Kubernetes naming requirements
+func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, username string,
+	startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
+	// Sanitize username for Kubernetes naming requirements.
 	sanitizedUsername := sanitizeUsername(username)
 
-	// Generate pod name: kubrowser-{username}
+	// Generate pod name: kubrowser-{username}.
 	podName := fmt.Sprintf("kubrowser-%s", sanitizedUsername)
 
-	// Ensure pod name doesn't exceed 63 characters (Kubernetes limit)
+	// Ensure pod name doesn't exceed 63 characters (Kubernetes limit).
 	if len(podName) > 63 {
-		// Truncate username if needed (leave room for "kubrowser-" prefix which is 10 chars)
+		// Truncate username if needed (leave room for "kubrowser-" prefix which is 10 chars).
 		maxUsernameLen := 63 - 10
 		if maxUsernameLen > 0 && len(sanitizedUsername) > maxUsernameLen {
 			sanitizedUsername = sanitizedUsername[:maxUsernameLen]
@@ -157,7 +158,7 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		}
 	}
 
-	// Create PVC for user's home directory if it doesn't exist
+	// Create PVC for user's home directory if it doesn't exist.
 	pvcName := fmt.Sprintf("kubrowser-home-%s", sanitizedUsername)
 	if err := pm.ensureHomePVC(ctx, pvcName, sanitizedUsername, statusCallback); err != nil {
 		if statusCallback != nil {
@@ -166,27 +167,27 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		return nil, fmt.Errorf("failed to create home PVC: %w", err)
 	}
 
-	// Check if a pod with this name already exists and reuse it if possible
+	// Check if a pod with this name already exists and reuse it if possible.
 	existingPod, err := pm.FindExistingPod(ctx, username)
 	if err == nil && existingPod != nil {
 		if statusCallback != nil {
 			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Found existing session for %s\x1b[0m\r\n", sanitizedUsername))
 		}
-		// Update heartbeat to ensure it doesn't get reaped immediately
+		// Update heartbeat to ensure it doesn't get reaped immediately.
 		_ = pm.UpdatePodHeartbeat(ctx, existingPod.Name)
 		return existingPod, nil
 	}
 
-	// Check if a pod with this name already exists and wait for it to be fully deleted
+	// Check if a pod with this name already exists and wait for it to be fully deleted.
 
 	existingPod, err = pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err == nil && existingPod != nil {
-		// Pod exists, delete it first and wait for it to be fully gone
+		// Pod exists, delete it first and wait for it to be fully gone.
 		if statusCallback != nil {
 			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Cleaning up existing pod for user %s...\x1b[0m", sanitizedUsername))
 		}
 
-		// Only delete if not already terminating
+		// Only delete if not already terminating.
 		if existingPod.DeletionTimestamp == nil {
 			deletePolicy := metav1.DeletePropagationForeground
 			deleteErr := pm.client.CoreV1().Pods(pm.namespace).Delete(ctx, podName, metav1.DeleteOptions{
@@ -199,20 +200,21 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 			}
 		}
 
-		// Wait for pod to be fully deleted (up to 60 seconds)
+		// Wait for pod to be fully deleted (up to 60 seconds).
 		waitStart := time.Now()
 		waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
 			_, getErr := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
 			if errors.IsNotFound(getErr) {
-				return true, nil // Pod is fully deleted
+				return true, nil // Pod is fully deleted.
 			}
 			if getErr != nil {
 				return false, getErr
 			}
-			// Pod still exists, update status
+			// Pod still exists, update status.
 			if statusCallback != nil {
 				elapsed := time.Since(waitStart)
-				statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for previous session to terminate... (%v)\x1b[0m", elapsed.Round(time.Millisecond)))
+				statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for previous session to terminate... (%v)\x1b[0m",
+					elapsed.Round(time.Millisecond)))
 			}
 			return false, nil
 		})
@@ -261,7 +263,7 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 					Name:            "terminal",
 					Image:           pm.image,
 					ImagePullPolicy: v1.PullIfNotPresent,
-					// The entrypoint.sh in the custom image handles user creation
+					// The entrypoint.sh in the custom image handles user creation.
 					Env: []v1.EnvVar{
 						{
 							Name:  "KUBROWSER_USER",
@@ -318,7 +320,7 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		statusCallback("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready...\x1b[0m")
 	}
 
-	// Wait for pod to be ready
+	// Wait for pod to be ready.
 	if err := pm.waitForPodReady(ctx, podName, startTime, statusCallback); err != nil {
 		if statusCallback != nil {
 			statusCallback("\r\x1b[K\x1b[31m[✗] Pod failed to become ready\x1b[0m\r\n")
@@ -345,12 +347,12 @@ func (pm *PodManager) waitForPodReady(ctx context.Context, podName string, start
 			return false, err
 		}
 
-		// Report phase changes - overwrite the waiting line with elapsed time
+		// Report phase changes - overwrite the waiting line with elapsed time.
 		if statusCallback != nil {
 			elapsed := time.Since(startTime)
 			if pod.Status.Phase != v1.PodPhase(lastPhase) {
 				lastPhase = string(pod.Status.Phase)
-				// Clear line and overwrite with phase info
+				// Clear line and overwrite with phase info.
 				switch pod.Status.Phase {
 				case v1.PodPending:
 					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (Pending, %v)\x1b[0m", elapsed.Round(time.Millisecond)))
@@ -360,20 +362,21 @@ func (pm *PodManager) waitForPodReady(ctx context.Context, podName string, start
 					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[31m[✗] Pod phase: %s (%v)\x1b[0m", pod.Status.Phase, elapsed.Round(time.Millisecond)))
 				}
 			} else {
-				// Update elapsed time periodically even if phase hasn't changed
+				// Update elapsed time periodically even if phase hasn't changed.
 				switch pod.Status.Phase {
 				case v1.PodPending, v1.PodRunning:
-					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (%s, %v)\x1b[0m", pod.Status.Phase, elapsed.Round(time.Millisecond)))
+					statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Waiting for pod to be ready... (%s, %v)\x1b[0m",
+						pod.Status.Phase, elapsed.Round(time.Millisecond)))
 				}
 			}
 		}
 
-		// Check if pod is running first
+		// Check if pod is running first.
 		if pod.Status.Phase != v1.PodRunning {
 			return false, nil
 		}
 
-		// Check if pod is ready
+		// Check if pod is ready.
 		for _, condition := range pod.Status.Conditions {
 			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
 				return true, nil
@@ -392,10 +395,10 @@ func (pm *PodManager) DeletePod(ctx context.Context, podName string) error {
 		PropagationPolicy: &deletePolicy,
 	})
 
-	// If pod is not found, it's already deleted - this is fine
+	// If pod is not found, it's already deleted - this is fine.
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil // Pod already deleted, treat as success
+			return nil // Pod already deleted, treat as success.
 		}
 		return err
 	}
@@ -405,10 +408,10 @@ func (pm *PodManager) DeletePod(ctx context.Context, podName string) error {
 
 // ensureHomePVC creates a PersistentVolumeClaim for the user's home directory if it doesn't exist.
 func (pm *PodManager) ensureHomePVC(ctx context.Context, pvcName, username string, statusCallback StatusCallback) error {
-	// Check if PVC already exists
+	// Check if PVC already exists.
 	_, err := pm.client.CoreV1().PersistentVolumeClaims(pm.namespace).Get(ctx, pvcName, metav1.GetOptions{})
 	if err == nil {
-		// PVC already exists
+		// PVC already exists.
 		if statusCallback != nil {
 			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Home storage ready for %s\x1b[0m\r\n", username))
 		}
@@ -422,7 +425,7 @@ func (pm *PodManager) ensureHomePVC(ctx context.Context, pvcName, username strin
 		statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Creating home storage for %s...\x1b[0m", username))
 	}
 
-	// Create PVC
+	// Create PVC.
 	storageSize := resource.MustParse("1Gi")
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -438,7 +441,7 @@ func (pm *PodManager) ensureHomePVC(ctx context.Context, pvcName, username strin
 			AccessModes: []v1.PersistentVolumeAccessMode{
 				v1.ReadWriteOnce,
 			},
-			Resources: v1.VolumeResourceRequirements{
+			Resources: v1.ResourceRequirements{
 				Requests: v1.ResourceList{
 					v1.ResourceStorage: storageSize,
 				},
@@ -508,7 +511,7 @@ func (pm *PodManager) FindExistingPod(ctx context.Context, username string) (*v1
 	sanitizedUsername := sanitizeUsername(username)
 	podName := fmt.Sprintf("kubrowser-%s", sanitizedUsername)
 
-	// Ensure pod name consistency with creation logic
+	// Ensure pod name consistency with creation logic.
 	if len(podName) > 63 {
 		maxUsernameLen := 63 - 10
 		if maxUsernameLen > 0 && len(sanitizedUsername) > maxUsernameLen {
@@ -525,9 +528,9 @@ func (pm *PodManager) FindExistingPod(ctx context.Context, username string) (*v1
 		return nil, err
 	}
 
-	// Check if pod is usable (Running and not deleting)
+	// Check if pod is usable (Running and not deleting).
 	if pod.Status.Phase == v1.PodRunning && pod.DeletionTimestamp == nil {
-		// Also verify it's ready
+		// Also verify it's ready.
 		for _, condition := range pod.Status.Conditions {
 			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
 				return pod, nil
@@ -542,8 +545,8 @@ func (pm *PodManager) FindExistingPod(ctx context.Context, username string) (*v1
 func (pm *PodManager) UpdatePodHeartbeat(ctx context.Context, podName string) error {
 	timestamp := time.Now().Format(time.RFC3339)
 
-	// Create patch to update annotation
-	patchData := []byte(fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, HeartbeatAnnotation, timestamp))
+	// Create patch to update annotation.
+	patchData := []byte(fmt.Sprintf(`{"metadata":{"annotations":{%q:%q}}}`, HeartbeatAnnotation, timestamp))
 
 	_, err := pm.client.CoreV1().Pods(pm.namespace).Patch(ctx, podName, types.MergePatchType, patchData, metav1.PatchOptions{})
 	return err
@@ -559,18 +562,18 @@ func (pm *PodManager) CleanupStalePods(ctx context.Context, timeout time.Duratio
 	now := time.Now()
 	deletedCount := 0
 
-	for _, pod := range pods {
-		// Skip if already deleting
+	for i := range pods {
+		pod := &pods[i]
+		// Skip if already deleting.
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
 
 		lastHeartbeatStr, ok := pod.Annotations[HeartbeatAnnotation]
 		if !ok {
-			// No heartbeat? Assume it's old/legacy or just started.
-			// Check creation timestamp as fallback
+			// Check creation timestamp as fallback.
 			if now.Sub(pod.CreationTimestamp.Time) > timeout {
-				// Old pod with no heartbeat (or legacy), delete it
+				// Old pod with no heartbeat (or legacy), delete it.
 				_ = pm.DeletePod(ctx, pod.Name)
 				deletedCount++
 			}
@@ -579,7 +582,7 @@ func (pm *PodManager) CleanupStalePods(ctx context.Context, timeout time.Duratio
 
 		lastHeartbeat, err := time.Parse(time.RFC3339, lastHeartbeatStr)
 		if err != nil {
-			// Invalid format? safe to ignore or delete? Let's check creation time as fallback
+			// Invalid format? safe to ignore or delete? Let's check creation time as fallback.
 			if now.Sub(pod.CreationTimestamp.Time) > timeout {
 				_ = pm.DeletePod(ctx, pod.Name)
 				deletedCount++
@@ -588,7 +591,7 @@ func (pm *PodManager) CleanupStalePods(ctx context.Context, timeout time.Duratio
 		}
 
 		if now.Sub(lastHeartbeat) > timeout {
-			// Stale pod
+			// Stale pod.
 			fmt.Printf("Reaping stale pod: %s (last heartbeat: %s)\n", pod.Name, lastHeartbeatStr)
 			if err := pm.DeletePod(ctx, pod.Name); err != nil {
 				fmt.Printf("Failed to reap pod %s: %v\n", pod.Name, err)

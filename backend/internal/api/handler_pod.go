@@ -11,11 +11,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"github.com/kubrowser/kubrowser-backend/internal/terminal"
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/kubrowser/kubrowser-backend/internal/terminal"
 )
 
 // HandleListNamespaces lists all available Kubernetes namespaces.
@@ -31,7 +32,8 @@ func (h *Handlers) HandleListNamespaces(c *gin.Context) {
 	}
 
 	namespaceList := make([]gin.H, 0, len(namespaces.Items))
-	for _, ns := range namespaces.Items {
+	for i := range namespaces.Items {
+		ns := &namespaces.Items[i]
 		namespaceList = append(namespaceList, gin.H{
 			"name":   ns.Name,
 			"status": ns.Status.Phase,
@@ -47,8 +49,7 @@ func (h *Handlers) HandleListPods(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	// Use metav1.NamespaceAll to list pods from all namespaces
-	// Handle both "*" and URL-encoded "%2A"
+	// Handle both "*" and URL-encoded "%2A".
 	listNamespace := namespace
 	if namespace == "*" || namespace == "%2A" || namespace == "all" || namespace == "" {
 		listNamespace = metav1.NamespaceAll
@@ -71,8 +72,9 @@ func (h *Handlers) HandleListPods(c *gin.Context) {
 	}).Info("Successfully listed pods")
 
 	podList := make([]gin.H, 0, len(pods.Items))
-	for _, pod := range pods.Items {
-		// Get pod status
+	for i := range pods.Items {
+		pod := &pods.Items[i]
+		// Get pod status.
 		status := string(pod.Status.Phase)
 		ready := false
 		for _, condition := range pod.Status.Conditions {
@@ -88,13 +90,13 @@ func (h *Handlers) HandleListPods(c *gin.Context) {
 			"status":      status,
 			"ready":       ready,
 			"age":         time.Since(pod.CreationTimestamp.Time).Round(time.Second).String(),
-			"restarts":    getRestartCount(&pod),
+			"restarts":    getRestartCount(pod),
 			"node":        pod.Spec.NodeName,
 			"podIP":       pod.Status.PodIP,
 			"qosClass":    string(pod.Status.QOSClass),
 			"labels":      pod.Labels,
 			"annotations": pod.Annotations,
-			"containers":  getContainerInfo(&pod),
+			"containers":  getContainerInfo(pod),
 		})
 	}
 
@@ -170,13 +172,13 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	if !follow {
-		// For non-following logs, use a timeout
+		// For non-following logs, use a timeout.
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 	}
 
-	// Get pod to find container name if not provided
+	// Get pod to find container name if not provided.
 	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -188,20 +190,20 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 		return
 	}
 
-	// Use first container if not specified
+	// Use first container if not specified.
 	if containerName == "" && len(pod.Spec.Containers) > 0 {
 		containerName = pod.Spec.Containers[0].Name
 	}
 
-	// Parse tail lines
+	// Parse tail lines.
 	tailLinesInt := int64(100)
 	if tailLines != "" {
-		if parsed, err := strconv.ParseInt(tailLines, 10, 64); err == nil {
+		if parsed, parseErr := strconv.ParseInt(tailLines, 10, 64); parseErr == nil {
 			tailLinesInt = parsed
 		}
 	}
 
-	// Get logs
+	// Get logs.
 	podLogOpts := &v1.PodLogOptions{
 		Container: containerName,
 		Follow:    follow,
@@ -220,7 +222,7 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	c.Header("Cache-Control", "no-cache")
 
-	// Stream logs to response
+	// Stream logs to response.
 	buf := make([]byte, 4096)
 	for {
 		select {
@@ -240,7 +242,7 @@ func (h *Handlers) HandlePodLogs(c *gin.Context) {
 				if !follow {
 					break
 				}
-				// For follow mode, EOF might be temporary, continue reading
+				// For follow mode, EOF might be temporary, continue reading.
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
@@ -256,7 +258,7 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 	podName := c.Param("name")
 	containerName := c.DefaultQuery("container", "")
 
-	// Upgrade to WebSocket
+	// Upgrade to WebSocket.
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to upgrade to WebSocket")
@@ -272,7 +274,7 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Set WebSocket close handler to cancel context
+	// Set WebSocket close handler to cancel context.
 	ws.SetCloseHandler(func(code int, text string) error {
 		h.logger.WithFields(logrus.Fields{
 			"pod":       podName,
@@ -284,7 +286,7 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 		return nil
 	})
 
-	// Get pod to find container name if not provided
+	// Get pod to find container name if not provided.
 	h.logger.WithFields(logrus.Fields{
 		"pod":       podName,
 		"namespace": namespace,
@@ -293,7 +295,8 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 	pod, err := h.podManager.GetClient().CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get pod")
-		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Pod not found"))
+		_ = ws.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "Pod not found"))
 		return
 	}
 
@@ -303,27 +306,30 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 		"phase":     pod.Status.Phase,
 	}).Info("Pod found, checking status")
 
-	// Check if pod is running
+	// Check if pod is running.
 	if pod.Status.Phase != v1.PodRunning {
 		h.logger.WithField("phase", pod.Status.Phase).Error("Pod is not running")
-		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, fmt.Sprintf("Pod is not running (phase: %s)", pod.Status.Phase)))
+		_ = ws.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, fmt.Sprintf("Pod is not running (phase: %s)", pod.Status.Phase)))
 		return
 	}
 
-	// Use first container if not specified
+	// Use first container if not specified.
 	if containerName == "" && len(pod.Spec.Containers) > 0 {
 		containerName = pod.Spec.Containers[0].Name
 	}
 
 	if containerName == "" {
 		h.logger.Error("No container found in pod")
-		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "No containers found in pod"))
+		_ = ws.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "No containers found in pod"))
 		return
 	}
 
-	// Check container image to provide better error messages
+	// Check container image to provide better error messages.
 	var containerImage string
-	for _, container := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
 		if container.Name == containerName {
 			containerImage = container.Image
 			break
@@ -342,7 +348,7 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 		"container": containerName,
 	}).Info("Starting exec session")
 
-	// Stream exec - reuse terminal executor but with different namespace
+	// Stream exec - reuse terminal executor but with different namespace.
 	executor := terminal.NewExecutor(h.podManager.GetClient(), h.podManager.GetConfig(), namespace)
 	if err := executor.StreamTerminal(ctx, ws, podName, containerName); err != nil {
 		h.logger.WithError(err).WithFields(logrus.Fields{
@@ -351,14 +357,16 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 			"container": containerName,
 		}).Error("Exec stream error")
 
-		// Provide user-friendly error messages
+		// Provide user-friendly error messages.
 		errMsg := err.Error()
-		if strings.Contains(errMsg, "no such file or directory") || strings.Contains(errMsg, "exec:") || strings.Contains(errMsg, "no shell found") {
+		if strings.Contains(errMsg, "no such file or directory") ||
+			strings.Contains(errMsg, "exec:") ||
+			strings.Contains(errMsg, "no shell found") {
 			errMsg = fmt.Sprintf("Container has no shell (image: %s). Use 'kubectl debug' for distroless containers.", containerImage)
 		}
 
-		// Send clean error message to client before closing
-		ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Exec error: %s", errMsg)))
+		// Send clean error message to client before closing.
+		_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("Exec error: %s", errMsg)))
 	} else {
 		h.logger.WithFields(logrus.Fields{
 			"pod":       podName,
@@ -370,12 +378,14 @@ func (h *Handlers) HandlePodExec(c *gin.Context) {
 
 func getContainerInfo(pod *v1.Pod) []gin.H {
 	containers := make([]gin.H, 0, len(pod.Spec.Containers))
-	for _, c := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		c := &pod.Spec.Containers[i]
 		restartCount := int32(0)
 		state := "Unknown"
 
-		// Find status for this container
-		for _, status := range pod.Status.ContainerStatuses {
+		// Find status for this container.
+		for j := range pod.Status.ContainerStatuses {
+			status := &pod.Status.ContainerStatuses[j]
 			if status.Name == c.Name {
 				restartCount = status.RestartCount
 				if status.State.Running != nil {

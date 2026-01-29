@@ -7,6 +7,6 @@
         "build": "go build -o bin/server ./cmd/server",
         "test": "go test ./... -v",
         "lint": "golangci-lint run --timeout=5m",
-        "format": "gofmt -w . && goimports -w -local github.com/kubrowser ."
+        "format": "gofmt -w . && (command -v goimports >/dev/null && goimports -w -local github.com/kubrowser . || echo 'goimports not found, skipping imports formatting')"
     }
 }

@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// NodeMetrics structs for parsing metrics.k8s.io response
+// NodeMetrics structs for parsing metrics.k8s.io response.
 type NodeMetricsList struct {
 	Items []struct {
 		Metadata struct {
@@ -45,10 +45,10 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 
 	h.logger.WithField("nodes_count", len(nodes.Items)).Info("Successfully listed nodes")
 
-	// Fetch metrics
+	// Fetch metrics.
 	metricsMap := make(map[string]map[string]string)
 
-	// Create a REST client for metrics
+	// Create a REST client for metrics.
 	config := h.podManager.GetConfig()
 	if config != nil {
 		metricsConfig := *config
@@ -56,24 +56,26 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 		metricsConfig.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
 		metricsConfig.APIPath = "/apis"
 
-		metricsClient, err := rest.RESTClientFor(&metricsConfig)
+		var metricsClient *rest.RESTClient
+		metricsClient, err = rest.RESTClientFor(&metricsConfig)
 		if err == nil {
-			data, err := metricsClient.Get().Resource("nodes").DoRaw(ctx)
+			var data []byte
+			data, err = metricsClient.Get().Resource("nodes").DoRaw(ctx)
 			if err == nil {
 				var metricsList NodeMetricsList
-				if err := json.Unmarshal(data, &metricsList); err == nil {
+				if err = json.Unmarshal(data, &metricsList); err == nil {
 					for _, item := range metricsList.Items {
-						// Parse CPU
+						// Parse CPU.
 						cpuStr := "0"
-						if cpuQ, err := resource.ParseQuantity(item.Usage.CPU); err == nil {
-							// Convert to cores (float)
+						if cpuQ, cpuErr := resource.ParseQuantity(item.Usage.CPU); cpuErr == nil {
+							// Convert to cores (float).
 							cpuStr = fmt.Sprintf("%.2f", float64(cpuQ.MilliValue())/1000.0)
 						}
 
-						// Parse Memory
+						// Parse Memory.
 						memStr := "0"
-						if memQ, err := resource.ParseQuantity(item.Usage.Memory); err == nil {
-							// Convert to GB
+						if memQ, memErr := resource.ParseQuantity(item.Usage.Memory); memErr == nil {
+							// Convert to GB.
 							memGB := float64(memQ.Value()) / (1024 * 1024 * 1024)
 							memStr = fmt.Sprintf("%.2f GB", memGB)
 						}
@@ -95,8 +97,9 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 	}
 
 	nodeList := make([]gin.H, 0, len(nodes.Items))
-	for _, node := range nodes.Items {
-		// Get node status
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		// Get node status.
 		ready := false
 		status := "NotReady"
 		for _, condition := range node.Status.Conditions {
@@ -111,7 +114,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			}
 		}
 
-		// Get internal IP
+		// Get internal IP.
 		internalIP := ""
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == v1.NodeInternalIP {
@@ -120,7 +123,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			}
 		}
 
-		// Get external IP (if available)
+		// Get external IP (if available).
 		externalIP := ""
 		for _, addr := range node.Status.Addresses {
 			if addr.Type == v1.NodeExternalIP {
@@ -129,7 +132,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			}
 		}
 
-		// Calculate uptime from creation timestamp and format as days/hours
+		// Calculate uptime from creation timestamp and format as days/hours.
 		uptimeDuration := time.Since(node.CreationTimestamp.Time)
 		days := int(uptimeDuration.Hours() / 24)
 		hours := int(uptimeDuration.Hours()) % 24
@@ -140,28 +143,25 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			uptimeStr = fmt.Sprintf("%dh", hours)
 		}
 
-		// Get node role from labels
-		// In Kubernetes, control-plane/master labels often exist but have empty values
-		// The presence of the label itself indicates the role
+		// The presence of the label itself indicates the role.
 		role := "worker"
 		if node.Labels != nil {
-			// Check for control-plane role (newer Kubernetes versions)
-			// Label exists (value can be empty or "true")
+			// Label exists (value can be empty or "true").
 			if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
 				role = "control-plane"
 			} else if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
-				// Check for master role (older Kubernetes versions)
+				// Check for master role (older Kubernetes versions).
 				role = "master"
 			} else if val, ok := node.Labels["kubernetes.io/role"]; ok && val != "" {
-				// Check for generic role label
+				// Check for generic role label.
 				role = val
 			} else {
-				// Check all labels for any node-role pattern
+				// Check all labels for any node-role pattern.
 				for key := range node.Labels {
 					if strings.HasPrefix(key, "node-role.kubernetes.io/") {
 						parts := strings.Split(key, "/")
 						if len(parts) > 1 {
-							// Extract role from label key (e.g., "control-plane" from "node-role.kubernetes.io/control-plane")
+							// Extract role from label key (e.g., "control-plane" from "node-role.kubernetes.io/control-plane").
 							roleName := parts[1]
 							if roleName != "" {
 								role = roleName
@@ -173,24 +173,24 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			}
 		}
 
-		// Get node info
+		// Get node info.
 		kubeletVersion := node.Status.NodeInfo.KubeletVersion
 		osImage := node.Status.NodeInfo.OSImage
 		containerRuntime := node.Status.NodeInfo.ContainerRuntimeVersion
 		architecture := node.Status.NodeInfo.Architecture
 		operatingSystem := node.Status.NodeInfo.OperatingSystem
 
-		// Get CPU and memory capacity
+		// Get CPU and memory capacity.
 		cpuCapacity := node.Status.Capacity[v1.ResourceCPU]
 		memoryCapacity := node.Status.Capacity[v1.ResourceMemory]
 		cpuAllocatable := node.Status.Allocatable[v1.ResourceCPU]
 		memoryAllocatable := node.Status.Allocatable[v1.ResourceMemory]
 
-		// Convert memory to GB
+		// Convert memory to GB.
 		memoryCapacityGB := float64(memoryCapacity.Value()) / (1024 * 1024 * 1024)
 		memoryAllocatableGB := float64(memoryAllocatable.Value()) / (1024 * 1024 * 1024)
 
-		// Get Usage if available
+		// Get Usage if available.
 		cpuUsage := "0"
 		memoryUsage := "0"
 		if metrics, ok := metricsMap[node.Name]; ok {
@@ -198,7 +198,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			memoryUsage = metrics["memory"]
 		}
 
-		// Get labels
+		// Get labels.
 		labels := make(map[string]string)
 		if node.Labels != nil {
 			for k, v := range node.Labels {
@@ -206,13 +206,13 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			}
 		}
 
-		// Get taints
+		// Get taints.
 		taints := make([]string, 0)
 		for _, taint := range node.Spec.Taints {
 			taints = append(taints, fmt.Sprintf("%s=%s:%s", taint.Key, taint.Value, taint.Effect))
 		}
 
-		// Ensure role is never empty
+		// Ensure role is never empty.
 		if role == "" {
 			role = "worker"
 		}
@@ -241,7 +241,7 @@ func (h *Handlers) HandleListNodes(c *gin.Context) {
 			"age":               time.Since(node.CreationTimestamp.Time).Round(time.Second).String(),
 		})
 
-		// Log role for debugging
+		// Log role for debugging.
 		h.logger.WithFields(logrus.Fields{
 			"node": node.Name,
 			"role": role,

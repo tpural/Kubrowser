@@ -1,22 +1,24 @@
 {
-    "name": "kubrowser",
-    "version": "0.1.0",
-    "private": true,
-    "description": "Kubernetes Browser - Visual management for your k8s clusters",
-    "scripts": {
-        "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
-        "build": "pnpm -r build",
-        "lint": "pnpm -r lint",
-        "format": "pnpm -r format",
-        "test": "pnpm -r test",
-        "install:all": "pnpm install && cd backend && go mod download",
-        "build:terminal": "docker build -f Dockerfile.terminal -t kubrowser-terminal:latest .",
-        "kill-sessions": "./scripts/kill-sessions.sh --all",
-        "clean": "rm -rf backend/bin frontend/.next frontend/out node_modules"
-    },
-    "devDependencies": {
-        "concurrently": "^9.1.2",
-        "dotenv-cli": "^8.0.0"
-    },
-    "packageManager": "pnpm@10.2.1"
+  "name": "kubrowser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kubernetes Browser - Visual management for your k8s clusters",
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "test": "pnpm -r test",
+    "install:all": "pnpm install && cd backend && go mod download && (command -v pre-commit >/dev/null && pre-commit install || echo 'pre-commit not found, skipping hook installation')",
+    "pre-commit:install": "pre-commit install",
+    "pre-commit:run": "pre-commit run --all-files",
+    "build:terminal": "docker build -f Dockerfile.terminal -t kubrowser-terminal:latest .",
+    "kill-sessions": "./scripts/kill-sessions.sh --all",
+    "clean": "rm -rf backend/bin frontend/.next frontend/out node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "dotenv-cli": "^8.0.0"
+  },
+  "packageManager": "pnpm@10.2.1"
 }

@@ -4,19 +4,20 @@ import (
 	"context"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/kubrowser/kubrowser-backend/internal/k8s"
 	"github.com/kubrowser/kubrowser-backend/internal/session"
-	"github.com/sirupsen/logrus"
 )
 
 // Cleaner handles cleanup of stale pods and sessions.
 type Cleaner struct {
-	logger      *logrus.Logger
-	podManager  *k8s.PodManager
-	sessionMgr  *session.Manager
-	interval    time.Duration
-	timeout     time.Duration
-	stopChan    chan struct{}
+	logger     *logrus.Logger
+	podManager *k8s.PodManager
+	sessionMgr *session.Manager
+	stopChan   chan struct{}
+	interval   time.Duration
+	timeout    time.Duration
 }
 
 // NewCleaner creates a new cleanup service.
@@ -63,7 +64,7 @@ func (c *Cleaner) cleanup(ctx context.Context) {
 			return true
 		}
 
-		// Delete the pod associated with the session
+		// Delete the pod associated with the session.
 		deleteCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
