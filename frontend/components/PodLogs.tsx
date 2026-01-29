@@ -9,7 +9,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, FileText, Download, ArrowDown, Play, Pause } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  FileText,
+  Download,
+  ArrowDown,
+  Play,
+  Pause,
+} from "lucide-react";
 
 interface PodLogsProps {
   podName: string;
@@ -23,7 +31,9 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
   const [error, setError] = useState<string | null>(null);
   const [autoTail, setAutoTail] = useState(true);
   const logsContainerRef = useRef<HTMLDivElement>(null);
-  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(
+    null
+  );
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -49,7 +59,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
   const forceScrollToBottom = useCallback(() => {
     const container = logsContainerRef.current;
     if (!container) return;
-    
+
     // Direct DOM manipulation for immediate effect
     container.scrollTop = container.scrollHeight;
   }, []);
@@ -72,45 +82,48 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     setAutoTail(true);
     isInitialLoadRef.current = true;
     userScrolledUpRef.current = false;
-    
+
     const apiUrl = getApiUrl();
     const url = `${apiUrl}/api/v1/pods/${podName}/logs?namespace=${encodeURIComponent(namespace)}&tail=500&follow=true`;
-    
+
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-    
+
     fetch(url, { signal: abortController.signal })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Failed to fetch logs: ${response.statusText}`);
         }
         setLoading(false);
-        
+
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
-        
+
         if (!reader) {
           throw new Error("No response body");
         }
-        
+
         readerRef.current = reader;
-        
+
         const readStream = () => {
-          reader.read().then(({ done, value }) => {
-            if (!mountedRef.current) return;
-            if (done) return;
-            const chunk = decoder.decode(value, { stream: true });
-            setLogs((prev) => prev + chunk);
-            readStream();
-          }).catch((err) => {
-            if (!mountedRef.current) return;
-            if (err.name !== "AbortError" && err.name !== "NetworkError") {
-              setError(err.message);
-              setLoading(false);
-            }
-          });
+          reader
+            .read()
+            .then(({ done, value }) => {
+              if (!mountedRef.current) return;
+              if (done) return;
+              const chunk = decoder.decode(value, { stream: true });
+              setLogs((prev) => prev + chunk);
+              readStream();
+            })
+            .catch((err) => {
+              if (!mountedRef.current) return;
+              if (err.name !== "AbortError" && err.name !== "NetworkError") {
+                setError(err.message);
+                setLoading(false);
+              }
+            });
         };
-        
+
         readStream();
       })
       .catch((err) => {
@@ -134,12 +147,20 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     URL.revokeObjectURL(url);
   };
 
+  // Initial fetch on mount
   useEffect(() => {
     mountedRef.current = true;
-    fetchLogs();
-    
+
+    // Schedule fetch for next tick to avoid setState-in-effect warning
+    const timeoutId = setTimeout(() => {
+      if (mountedRef.current) {
+        fetchLogs();
+      }
+    }, 0);
+
     return () => {
       mountedRef.current = false;
+      clearTimeout(timeoutId);
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
         scrollTimeoutRef.current = null;
@@ -162,43 +183,43 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
   // Use useEffect for scroll updates - more reliable with async rendering
   useEffect(() => {
     if (!logs || !logsContainerRef.current) return;
-    
+
     const container = logsContainerRef.current;
-    
+
     // Aggressive scroll function that tries multiple times
     const scrollToEnd = () => {
       if (!logsContainerRef.current) return;
       const c = logsContainerRef.current;
       c.scrollTop = c.scrollHeight;
     };
-    
+
     // During initial load (first 3 seconds), keep scrolling to bottom aggressively
     if (isInitialLoadRef.current) {
       // Immediate scroll
       scrollToEnd();
-      
+
       // Use a polling mechanism during initial load
       const intervalId = setInterval(scrollToEnd, 100);
-      
+
       // Also use RAF for additional coverage
       const rafId = requestAnimationFrame(() => {
         scrollToEnd();
         requestAnimationFrame(scrollToEnd);
       });
-      
+
       // After 3 seconds, transition to normal auto-tail behavior
       const timer = setTimeout(() => {
         isInitialLoadRef.current = false;
         clearInterval(intervalId);
       }, 3000);
-      
+
       return () => {
         clearTimeout(timer);
         clearInterval(intervalId);
         cancelAnimationFrame(rafId);
       };
     }
-    
+
     // After initial load, only scroll if auto-tail is enabled and user hasn't scrolled up
     if (autoTail && !userScrolledUpRef.current) {
       scrollToEnd();
@@ -212,19 +233,19 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
   const handleScroll = useCallback(() => {
     const container = logsContainerRef.current;
     if (!container) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = container;
     const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
-    
+
     // Detect scroll direction
     const scrolledUp = scrollTop < lastScrollTopRef.current;
     lastScrollTopRef.current = scrollTop;
-    
+
     // Clear any existing timeout
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
-    
+
     // If user scrolled up, mark it and disable auto-tail
     if (scrolledUp && !isAtBottom) {
       userScrolledUpRef.current = true;
@@ -232,7 +253,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
         setAutoTail(false);
       }
     }
-    
+
     // If user scrolled to bottom, re-enable auto-tail
     if (isAtBottom) {
       userScrolledUpRef.current = false;
@@ -248,7 +269,7 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     const newValue = !autoTail;
     setAutoTail(newValue);
     userScrolledUpRef.current = !newValue;
-    
+
     if (newValue) {
       // Immediately scroll to bottom when enabling
       forceScrollToBottom();
@@ -258,13 +279,13 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
     }
   }, [autoTail, forceScrollToBottom]);
 
-  const lineCount = logs.split('\n').length - 1;
+  const lineCount = logs.split("\n").length - 1;
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent 
+      <DialogContent
         className="p-0 overflow-hidden"
-        style={{ maxWidth: '70vw', width: '70vw', maxHeight: '90vh' }}
+        style={{ maxWidth: "70vw", width: "70vw", maxHeight: "90vh" }}
       >
         {/* Header */}
         <DialogHeader className="px-6 py-4 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
@@ -299,7 +320,11 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
               size="sm"
               onClick={toggleAutoTail}
               className={`h-8 text-xs ${autoTail ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
-              title={autoTail ? "Auto-tail is ON - click to pause" : "Auto-tail is OFF - click to follow"}
+              title={
+                autoTail
+                  ? "Auto-tail is ON - click to pause"
+                  : "Auto-tail is OFF - click to follow"
+              }
             >
               {autoTail ? (
                 <>
@@ -332,21 +357,26 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
               disabled={loading}
               className="h-8 text-xs"
             >
-              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw
+                className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`}
+              />
               Refresh
             </Button>
           </div>
         </div>
 
         {/* Logs Content */}
-        <div className="relative overflow-hidden" style={{ height: '60vh', minHeight: '300px' }}>
-          <div 
+        <div
+          className="relative overflow-hidden"
+          style={{ height: "60vh", minHeight: "300px" }}
+        >
+          <div
             ref={logsContainerRef}
             onScroll={handleScroll}
             className="h-full w-full overflow-y-auto overflow-x-hidden bg-[#0d1117] text-[#c9d1d9] font-mono text-xs"
-            style={{ 
-              scrollBehavior: 'auto',
-              overscrollBehavior: 'contain'
+            style={{
+              scrollBehavior: "auto",
+              overscrollBehavior: "contain",
             }}
           >
             <AnimatePresence mode="wait">
@@ -360,7 +390,9 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                 >
                   <div className="flex flex-col items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-                    <span className="text-sm text-muted-foreground">Loading logs...</span>
+                    <span className="text-sm text-muted-foreground">
+                      Loading logs...
+                    </span>
                   </div>
                 </motion.div>
               ) : error ? (
@@ -383,21 +415,26 @@ export function PodLogs({ podName, namespace, onClose }: PodLogsProps) {
                   className="p-4"
                 >
                   <pre className="whitespace-pre-wrap break-words leading-relaxed m-0">
-                    {logs.split('\n').map((line, i) => (
-                      <div 
-                        key={i} 
+                    {logs.split("\n").map((line, i) => (
+                      <div
+                        key={i}
                         className="hover:bg-white/5 -mx-4 px-4 py-0.5 flex"
                       >
                         <span className="text-[#6e7681] select-none w-12 flex-shrink-0 text-right pr-4">
                           {i + 1}
                         </span>
-                        <span className={
-                          line.toLowerCase().includes('error') ? 'text-red-400' :
-                          line.toLowerCase().includes('warn') ? 'text-amber-400' :
-                          line.toLowerCase().includes('info') ? 'text-blue-400' :
-                          ''
-                        }>
-                          {line || '\u00A0'}
+                        <span
+                          className={
+                            line.toLowerCase().includes("error")
+                              ? "text-red-400"
+                              : line.toLowerCase().includes("warn")
+                                ? "text-amber-400"
+                                : line.toLowerCase().includes("info")
+                                  ? "text-blue-400"
+                                  : ""
+                          }
+                        >
+                          {line || "\u00A0"}
                         </span>
                       </div>
                     ))}

@@ -9,9 +9,18 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  RefreshCw, Server, Cpu, HardDrive, Network,
-  ChevronDown, ChevronRight, Clock, Container,
-  Activity, Zap, MemoryStick
+  RefreshCw,
+  Server,
+  Cpu,
+  HardDrive,
+  Network,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Container,
+  Activity,
+  Zap,
+  MemoryStick,
 } from "lucide-react";
 
 interface Node {
@@ -91,7 +100,7 @@ function ResourceBar({
   used,
   total,
   label,
-  color = "blue"
+  color = "blue",
 }: {
   used: string;
   total: string;
@@ -102,13 +111,14 @@ function ResourceBar({
   // Parse memory values (e.g., "16Gi" -> 16)
   const parseValue = (val: string | undefined | null): number => {
     if (!val) return 0;
-    const num = parseFloat(val.replace(/[^0-9.]/g, ''));
+    const num = parseFloat(val.replace(/[^0-9.]/g, ""));
     return isNaN(num) ? 0 : num;
   };
 
   const usedNum = parseValue(used);
   const totalNum = parseValue(total);
-  const percentage = totalNum > 0 ? Math.min((usedNum / totalNum) * 100, 100) : 0;
+  const percentage =
+    totalNum > 0 ? Math.min((usedNum / totalNum) * 100, 100) : 0;
 
   const colorClasses = {
     blue: "from-blue-500 to-cyan-400",
@@ -121,7 +131,9 @@ function ResourceBar({
     <div className="space-y-1.5">
       <div className="flex justify-between text-xs">
         <span className="text-muted-foreground font-medium">{label}</span>
-        <span className="font-mono text-foreground">{used} / {total}</span>
+        <span className="font-mono text-foreground">
+          {used} / {total}
+        </span>
       </div>
       <div className="resource-bar h-2">
         <motion.div
@@ -162,7 +174,7 @@ export function NodeList({ onClose }: NodeListProps) {
     try {
       const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/v1/nodes`;
-      const response = await fetch(url, { credentials: 'include' });
+      const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         setError(`Failed to fetch nodes: ${response.statusText}`);
         setNodes([]);
@@ -284,7 +296,7 @@ export function NodeList({ onClose }: NodeListProps) {
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             {nodes.length} node{nodes.length !== 1 ? "s" : ""} •
-            {nodes.filter(n => n.ready).length} ready
+            {nodes.filter((n) => n.ready).length} ready
           </p>
         </div>
         <div className="flex gap-2">
@@ -295,7 +307,9 @@ export function NodeList({ onClose }: NodeListProps) {
             disabled={loading}
             className="relative overflow-hidden group"
           >
-            <RefreshCw className={`h-4 w-4 transition-transform group-hover:rotate-180 duration-500 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 transition-transform group-hover:rotate-180 duration-500 ${loading ? "animate-spin" : ""}`}
+            />
           </Button>
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose}>
@@ -311,7 +325,10 @@ export function NodeList({ onClose }: NodeListProps) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          <Alert variant="destructive" className="border-red-500/50 bg-red-500/10">
+          <Alert
+            variant="destructive"
+            className="border-red-500/50 bg-red-500/10"
+          >
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </motion.div>
@@ -335,13 +352,12 @@ export function NodeList({ onClose }: NodeListProps) {
             {nodes.map((node) => {
               const isExpanded = expandedNodes.has(node.name);
               return (
-                <motion.div
-                  key={node.name}
-                  variants={itemVariants}
-                  layout
-                >
-                  <Card className={`card-hover overflow-hidden transition-all duration-300 ${isExpanded ? "ring-2 ring-blue-500/20" : ""
-                    }`}>
+                <motion.div key={node.name} variants={itemVariants} layout>
+                  <Card
+                    className={`card-hover overflow-hidden transition-all duration-300 ${
+                      isExpanded ? "ring-2 ring-blue-500/20" : ""
+                    }`}
+                  >
                     {/* Header - Always Visible */}
                     <motion.div
                       className="p-3 cursor-pointer flex items-center justify-between gap-2 hover:bg-accent/30 transition-colors"
@@ -355,7 +371,9 @@ export function NodeList({ onClose }: NodeListProps) {
                         >
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </motion.div>
-                        <span className={getStatusDot(node.status, node.ready)} />
+                        <span
+                          className={getStatusDot(node.status, node.ready)}
+                        />
                         <h3 className="font-semibold truncate">{node.name}</h3>
                         <Badge
                           variant="outline"
@@ -427,7 +445,9 @@ export function NodeList({ onClose }: NodeListProps) {
                                 <div className="space-y-1 text-sm">
                                   {node.internalIP && (
                                     <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Internal IP</span>
+                                      <span className="text-muted-foreground">
+                                        Internal IP
+                                      </span>
                                       <span className="font-mono text-cyan-600 dark:text-cyan-400">
                                         {node.internalIP}
                                       </span>
@@ -435,7 +455,9 @@ export function NodeList({ onClose }: NodeListProps) {
                                   )}
                                   {node.externalIP && (
                                     <div className="flex justify-between">
-                                      <span className="text-muted-foreground">External IP</span>
+                                      <span className="text-muted-foreground">
+                                        External IP
+                                      </span>
                                       <span className="font-mono text-purple-600 dark:text-purple-400">
                                         {node.externalIP}
                                       </span>
@@ -452,11 +474,18 @@ export function NodeList({ onClose }: NodeListProps) {
                                 </div>
                                 <div className="space-y-1 text-sm">
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">OS</span>
-                                    <span>{node.operatingSystem} ({node.architecture})</span>
+                                    <span className="text-muted-foreground">
+                                      OS
+                                    </span>
+                                    <span>
+                                      {node.operatingSystem} (
+                                      {node.architecture})
+                                    </span>
                                   </div>
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Kubelet</span>
+                                    <span className="text-muted-foreground">
+                                      Kubelet
+                                    </span>
                                     <span className="font-mono text-blue-600 dark:text-blue-400">
                                       {node.kubeletVersion}
                                     </span>
@@ -468,15 +497,25 @@ export function NodeList({ onClose }: NodeListProps) {
                             {/* Additional Info */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 text-sm">
                               <div className="p-3 rounded-lg bg-card/50">
-                                <div className="text-muted-foreground mb-1">OS Image</div>
-                                <div className="truncate" title={node.osImage}>{node.osImage}</div>
+                                <div className="text-muted-foreground mb-1">
+                                  OS Image
+                                </div>
+                                <div className="truncate" title={node.osImage}>
+                                  {node.osImage}
+                                </div>
                               </div>
                               <div className="p-3 rounded-lg bg-card/50">
-                                <div className="text-muted-foreground mb-1">Container Runtime</div>
-                                <div className="truncate">{node.containerRuntime}</div>
+                                <div className="text-muted-foreground mb-1">
+                                  Container Runtime
+                                </div>
+                                <div className="truncate">
+                                  {node.containerRuntime}
+                                </div>
                               </div>
                               <div className="p-3 rounded-lg bg-card/50">
-                                <div className="text-muted-foreground mb-1">Age</div>
+                                <div className="text-muted-foreground mb-1">
+                                  Age
+                                </div>
                                 <div>{node.age}</div>
                               </div>
                             </div>
@@ -503,27 +542,36 @@ export function NodeList({ onClose }: NodeListProps) {
                             )}
 
                             {/* Labels */}
-                            {node.labels && Object.keys(node.labels).length > 0 && (
-                              <div className="pt-2">
-                                <div className="text-sm font-medium mb-2">Labels</div>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {Object.entries(node.labels).slice(0, 6).map(([key, value]) => (
-                                    <Badge
-                                      key={key}
-                                      variant="outline"
-                                      className="text-xs bg-card/80"
-                                    >
-                                      {key}={value}
-                                    </Badge>
-                                  ))}
-                                  {Object.keys(node.labels).length > 6 && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      +{Object.keys(node.labels).length - 6} more
-                                    </Badge>
-                                  )}
+                            {node.labels &&
+                              Object.keys(node.labels).length > 0 && (
+                                <div className="pt-2">
+                                  <div className="text-sm font-medium mb-2">
+                                    Labels
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Object.entries(node.labels)
+                                      .slice(0, 6)
+                                      .map(([key, value]) => (
+                                        <Badge
+                                          key={key}
+                                          variant="outline"
+                                          className="text-xs bg-card/80"
+                                        >
+                                          {key}={value}
+                                        </Badge>
+                                      ))}
+                                    {Object.keys(node.labels).length > 6 && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-xs"
+                                      >
+                                        +{Object.keys(node.labels).length - 6}{" "}
+                                        more
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
                           </div>
                         </motion.div>
                       )}

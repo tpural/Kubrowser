@@ -22,7 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Kubrowser - Browser-based kubectl Terminal",
-  description: "Access kubectl through temporary Kubernetes pods via your browser",
+  description:
+    "Access kubectl through temporary Kubernetes pods via your browser",
 };
 
 export default function RootLayout({
@@ -48,20 +49,20 @@ export default function RootLayout({
               toastOptions={{
                 duration: 3000,
                 style: {
-                  background: 'hsl(var(--card))',
-                  color: 'hsl(var(--card-foreground))',
-                  border: '1px solid hsl(var(--border))',
+                  background: "hsl(var(--card))",
+                  color: "hsl(var(--card-foreground))",
+                  border: "1px solid hsl(var(--border))",
                 },
                 success: {
                   iconTheme: {
-                    primary: '#22c55e',
-                    secondary: 'white',
+                    primary: "#22c55e",
+                    secondary: "white",
                   },
                 },
                 error: {
                   iconTheme: {
-                    primary: '#ef4444',
-                    secondary: 'white',
+                    primary: "#ef4444",
+                    secondary: "white",
                   },
                 },
               }}

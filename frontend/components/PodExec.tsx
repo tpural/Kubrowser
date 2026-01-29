@@ -20,7 +20,12 @@ interface PodExecProps {
 
 export function PodExec({ podName, namespace, onClose }: PodExecProps) {
   const { resolvedTheme } = useTheme(); // Added useTheme hook
-  console.log("[PodExec] Component rendered with podName:", podName, "namespace:", namespace);
+  console.log(
+    "[PodExec] Component rendered with podName:",
+    podName,
+    "namespace:",
+    namespace
+  );
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
 
@@ -31,47 +36,47 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
     const isDark = resolvedTheme === "dark";
     xtermRef.current.options.theme = isDark
       ? {
-        background: "#0a0a0a",
-        foreground: "#e4e4e7",
-        cursor: "#f4f4f5",
-        black: "#18181b",
-        red: "#ef4444",
-        green: "#22c55e",
-        yellow: "#eab308",
-        blue: "#3b82f6",
-        magenta: "#a855f7",
-        cyan: "#06b6d4",
-        white: "#f4f4f5",
-        brightBlack: "#71717a",
-        brightRed: "#f87171",
-        brightGreen: "#4ade80",
-        brightYellow: "#fbbf24",
-        brightBlue: "#60a5fa",
-        brightMagenta: "#c084fc",
-        brightCyan: "#22d3ee",
-        brightWhite: "#ffffff",
-      }
+          background: "#0a0a0a",
+          foreground: "#e4e4e7",
+          cursor: "#f4f4f5",
+          black: "#18181b",
+          red: "#ef4444",
+          green: "#22c55e",
+          yellow: "#eab308",
+          blue: "#3b82f6",
+          magenta: "#a855f7",
+          cyan: "#06b6d4",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#f87171",
+          brightGreen: "#4ade80",
+          brightYellow: "#fbbf24",
+          brightBlue: "#60a5fa",
+          brightMagenta: "#c084fc",
+          brightCyan: "#22d3ee",
+          brightWhite: "#ffffff",
+        }
       : {
-        background: "#fafafa", // zinc-50
-        foreground: "#18181b", // zinc-950
-        cursor: "#18181b",
-        black: "#18181b",
-        red: "#ef4444",
-        green: "#16a34a",
-        yellow: "#ca8a04",
-        blue: "#2563eb",
-        magenta: "#9333ea",
-        cyan: "#0891b2",
-        white: "#f4f4f5",
-        brightBlack: "#71717a",
-        brightRed: "#ef4444",
-        brightGreen: "#22c55e",
-        brightYellow: "#eab308",
-        brightBlue: "#3b82f6",
-        brightMagenta: "#a855f7",
-        brightCyan: "#06b6d4",
-        brightWhite: "#ffffff",
-      };
+          background: "#fafafa", // zinc-50
+          foreground: "#18181b", // zinc-950
+          cursor: "#18181b",
+          black: "#18181b",
+          red: "#ef4444",
+          green: "#16a34a",
+          yellow: "#ca8a04",
+          blue: "#2563eb",
+          magenta: "#9333ea",
+          cyan: "#0891b2",
+          white: "#f4f4f5",
+          brightBlack: "#71717a",
+          brightRed: "#ef4444",
+          brightGreen: "#22c55e",
+          brightYellow: "#eab308",
+          brightBlue: "#3b82f6",
+          brightMagenta: "#a855f7",
+          brightCyan: "#06b6d4",
+          brightWhite: "#ffffff",
+        };
   }, [resolvedTheme]);
 
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -80,7 +85,12 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    console.log("[PodExec] useEffect triggered for pod:", podName, "namespace:", namespace);
+    console.log(
+      "[PodExec] useEffect triggered for pod:",
+      podName,
+      "namespace:",
+      namespace
+    );
 
     // Handle resize - defined outside initTerminal so cleanup can access it
     const handleResize = () => {
@@ -99,7 +109,9 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
     // Wait for the ref to be available - use a small timeout to ensure DOM is ready
     const initTerminal = () => {
       if (!terminalRef.current) {
-        console.log("[PodExec] terminalRef.current is null, retrying in 50ms...");
+        console.log(
+          "[PodExec] terminalRef.current is null, retrying in 50ms..."
+        );
         setTimeout(initTerminal, 50);
         return;
       }
@@ -113,47 +125,47 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
         fontFamily: "Monaco, Menlo, 'Ubuntu Mono', monospace",
         theme: isDark
           ? {
-            background: "#0a0a0a",
-            foreground: "#e4e4e7",
-            cursor: "#f4f4f5",
-            black: "#18181b",
-            red: "#ef4444",
-            green: "#22c55e",
-            yellow: "#eab308",
-            blue: "#3b82f6",
-            magenta: "#a855f7",
-            cyan: "#06b6d4",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#f87171",
-            brightGreen: "#4ade80",
-            brightYellow: "#fbbf24",
-            brightBlue: "#60a5fa",
-            brightMagenta: "#c084fc",
-            brightCyan: "#22d3ee",
-            brightWhite: "#ffffff",
-          }
+              background: "#0a0a0a",
+              foreground: "#e4e4e7",
+              cursor: "#f4f4f5",
+              black: "#18181b",
+              red: "#ef4444",
+              green: "#22c55e",
+              yellow: "#eab308",
+              blue: "#3b82f6",
+              magenta: "#a855f7",
+              cyan: "#06b6d4",
+              white: "#f4f4f5",
+              brightBlack: "#71717a",
+              brightRed: "#f87171",
+              brightGreen: "#4ade80",
+              brightYellow: "#fbbf24",
+              brightBlue: "#60a5fa",
+              brightMagenta: "#c084fc",
+              brightCyan: "#22d3ee",
+              brightWhite: "#ffffff",
+            }
           : {
-            background: "#fafafa", // zinc-50
-            foreground: "#18181b", // zinc-950
-            cursor: "#18181b",
-            black: "#18181b",
-            red: "#ef4444",
-            green: "#16a34a",
-            yellow: "#ca8a04",
-            blue: "#2563eb",
-            magenta: "#9333ea",
-            cyan: "#0891b2",
-            white: "#f4f4f5",
-            brightBlack: "#71717a",
-            brightRed: "#ef4444",
-            brightGreen: "#22c55e",
-            brightYellow: "#eab308",
-            brightBlue: "#3b82f6",
-            brightMagenta: "#a855f7",
-            brightCyan: "#06b6d4",
-            brightWhite: "#ffffff",
-          },
+              background: "#fafafa", // zinc-50
+              foreground: "#18181b", // zinc-950
+              cursor: "#18181b",
+              black: "#18181b",
+              red: "#ef4444",
+              green: "#16a34a",
+              yellow: "#ca8a04",
+              blue: "#2563eb",
+              magenta: "#9333ea",
+              cyan: "#0891b2",
+              white: "#f4f4f5",
+              brightBlack: "#71717a",
+              brightRed: "#ef4444",
+              brightGreen: "#22c55e",
+              brightYellow: "#eab308",
+              brightBlue: "#3b82f6",
+              brightMagenta: "#a855f7",
+              brightCyan: "#06b6d4",
+              brightWhite: "#ffffff",
+            },
       });
 
       const fitAddon = new FitAddon();
@@ -192,21 +204,32 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
 
       // Show initial message in terminal
       if (xtermRef.current) {
-        xtermRef.current.writeln(`\r\n\x1b[36mConnecting to pod ${podName} in namespace ${namespace}...\x1b[0m\r\n`);
+        xtermRef.current.writeln(
+          `\r\n\x1b[36mConnecting to pod ${podName} in namespace ${namespace}...\x1b[0m\r\n`
+        );
       }
 
       // Set a connection timeout (shorter for faster feedback)
       connectionTimeoutRef.current = setTimeout(() => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+        if (
+          wsRef.current &&
+          wsRef.current.readyState === WebSocket.CONNECTING
+        ) {
           console.error("[PodExec] Connection timeout after 5 seconds");
           wsRef.current.close();
           setConnected(false);
           if (xtermRef.current) {
-            xtermRef.current.writeln("\r\n\x1b[31m✗ Connection timeout - unable to connect to backend\x1b[0m");
+            xtermRef.current.writeln(
+              "\r\n\x1b[31m✗ Connection timeout - unable to connect to backend\x1b[0m"
+            );
             xtermRef.current.writeln("\x1b[33mPlease check:\x1b[0m");
-            xtermRef.current.writeln("  1. Backend server is running on " + host);
+            xtermRef.current.writeln(
+              "  1. Backend server is running on " + host
+            );
             xtermRef.current.writeln("  2. Pod exists and is in Running state");
-            xtermRef.current.writeln("  3. Check browser console for WebSocket errors\r\n");
+            xtermRef.current.writeln(
+              "  3. Check browser console for WebSocket errors\r\n"
+            );
           }
         }
       }, 5000); // 5 second timeout for faster feedback
@@ -215,13 +238,18 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
       let ws: WebSocket;
       try {
         ws = new WebSocket(wsUrl);
-        console.log("[PodExec] WebSocket instance created, readyState:", ws.readyState);
+        console.log(
+          "[PodExec] WebSocket instance created, readyState:",
+          ws.readyState
+        );
         wsRef.current = ws; // Store immediately so timeout can check it
       } catch (err) {
         console.error("[PodExec] Failed to create WebSocket:", err);
         setConnected(false);
         if (xtermRef.current) {
-          xtermRef.current.writeln(`\r\n\x1b[31m✗ Failed to create WebSocket connection: ${err}\x1b[0m\r\n`);
+          xtermRef.current.writeln(
+            `\r\n\x1b[31m✗ Failed to create WebSocket connection: ${err}\x1b[0m\r\n`
+          );
         }
         return;
       }
@@ -237,7 +265,9 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
         setConnected(true);
         if (xtermRef.current) {
           xtermRef.current.clear();
-          xtermRef.current.writeln("\r\n\x1b[32mConnected to pod. Starting shell...\x1b[0m\r\n");
+          xtermRef.current.writeln(
+            "\r\n\x1b[32mConnected to pod. Starting shell...\x1b[0m\r\n"
+          );
         }
       };
 
@@ -269,8 +299,12 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
         }
         setConnected(false);
         if (xtermRef.current) {
-          xtermRef.current.writeln("\r\n\x1b[31m✗ WebSocket connection error\x1b[0m");
-          xtermRef.current.writeln("\x1b[33mCheck browser console (F12) for details\x1b[0m\r\n");
+          xtermRef.current.writeln(
+            "\r\n\x1b[31m✗ WebSocket connection error\x1b[0m"
+          );
+          xtermRef.current.writeln(
+            "\x1b[33mCheck browser console (F12) for details\x1b[0m\r\n"
+          );
         }
       };
 
@@ -287,7 +321,8 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
             let errorMsg = `\r\n\x1b[31m✗ Connection closed`;
             if (event.code === 1006) {
               // Check for authentication failure
-              const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+              const protocol =
+                window.location.protocol === "https:" ? "https:" : "http:";
               const apiUrl = getApiUrl();
               fetch(`${protocol}//${apiUrl}/api/v1/namespaces`)
                 .then((res) => {
@@ -295,7 +330,7 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
                     window.location.href = "/login";
                   }
                 })
-                .catch(() => { });
+                .catch(() => {});
 
               errorMsg += " - Unable to connect to backend server";
               errorMsg += "\r\n\x1b[33mPossible causes:\x1b[0m";
@@ -361,7 +396,7 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-h-[90vh] flex flex-col"
-        style={{ maxWidth: '65vw', width: '65vw' }}
+        style={{ maxWidth: "65vw", width: "65vw" }}
       >
         <DialogHeader>
           <DialogTitle>

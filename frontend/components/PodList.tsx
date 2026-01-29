@@ -9,8 +9,19 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Loader2, Trash2, RefreshCw, FileText, Box, Clock, RotateCcw, Layers,
-  ChevronRight, Network, Tag, Hash, Box as ContainerIcon
+  Loader2,
+  Trash2,
+  RefreshCw,
+  FileText,
+  Box,
+  Clock,
+  RotateCcw,
+  Layers,
+  ChevronRight,
+  Network,
+  Tag,
+  Hash,
+  Box as ContainerIcon,
 } from "lucide-react";
 import { PodLogs } from "./PodLogs";
 
@@ -96,7 +107,10 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
-  const [logsPod, setLogsPod] = useState<{ name: string; namespace: string } | null>(null);
+  const [logsPod, setLogsPod] = useState<{
+    name: string;
+    namespace: string;
+  } | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
   const [expandedPods, setExpandedPods] = useState<Set<string>>(new Set());
 
@@ -120,7 +134,7 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
     try {
       const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/v1/pods?namespace=${encodeURIComponent(namespace)}`;
-      const response = await fetch(url, { credentials: 'include' });
+      const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         if (response.status === 404 || response.status === 403) {
           setError(`Namespace "${namespace}" not found or access denied.`);
@@ -168,7 +182,11 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
     });
   };
 
-  const handleDelete = async (podName: string, podNamespace?: string, e?: React.MouseEvent) => {
+  const handleDelete = async (
+    podName: string,
+    podNamespace?: string,
+    e?: React.MouseEvent
+  ) => {
     if (e) e.stopPropagation();
 
     const targetNamespace = podNamespace || namespace;
@@ -181,7 +199,7 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
       const apiUrl = getApiUrl();
       const response = await fetch(
         `${apiUrl}/api/v1/pods/${podName}?namespace=${encodeURIComponent(targetNamespace)}`,
-        { method: "DELETE", credentials: 'include' }
+        { method: "DELETE", credentials: "include" }
       );
       if (!response.ok) {
         throw new Error(`Failed to delete pod: ${response.statusText}`);
@@ -209,8 +227,10 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
 
   const getStatusDot = (status: string, ready: boolean) => {
     if (status === "Running" && ready) return "status-dot status-dot-running";
-    if (status === "Running" || status === "Pending") return "status-dot status-dot-pending";
-    if (status === "Failed" || status === "Error") return "status-dot status-dot-failed";
+    if (status === "Running" || status === "Pending")
+      return "status-dot status-dot-pending";
+    if (status === "Failed" || status === "Error")
+      return "status-dot status-dot-failed";
     return "status-dot status-dot-unknown";
   };
 
@@ -283,7 +303,9 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
             <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
               <Layers className="h-4 w-4 text-white" />
             </div>
-            <span>Pods in <span className="text-blue-500">{namespace}</span></span>
+            <span>
+              Pods in <span className="text-blue-500">{namespace}</span>
+            </span>
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             {pods.length} pod{pods.length !== 1 ? "s" : ""} found
@@ -297,7 +319,9 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
             disabled={loading}
             className="relative overflow-hidden group"
           >
-            <RefreshCw className={`h-4 w-4 transition-transform group-hover:rotate-180 duration-500 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 transition-transform group-hover:rotate-180 duration-500 ${loading ? "animate-spin" : ""}`}
+            />
           </Button>
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose}>
@@ -313,7 +337,10 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
         >
-          <Alert variant="destructive" className="border-red-500/50 bg-red-500/10">
+          <Alert
+            variant="destructive"
+            className="border-red-500/50 bg-red-500/10"
+          >
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </motion.div>
@@ -346,8 +373,11 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                     exit="exit"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <Card className={`card-hover overflow-hidden transition-all duration-300 ${isExpanded ? "ring-2 ring-blue-500/20" : ""
-                      } bg-card/50 backdrop-blur-sm`}>
+                    <Card
+                      className={`card-hover overflow-hidden transition-all duration-300 ${
+                        isExpanded ? "ring-2 ring-blue-500/20" : ""
+                      } bg-card/50 backdrop-blur-sm`}
+                    >
                       {/* Header - Always Visible */}
                       <motion.div
                         className="p-3 cursor-pointer"
@@ -363,8 +393,12 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                               >
                                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
                               </motion.div>
-                              <span className={getStatusDot(pod.status, pod.ready)} />
-                              <h3 className="font-medium truncate text-sm">{pod.name}</h3>
+                              <span
+                                className={getStatusDot(pod.status, pod.ready)}
+                              />
+                              <h3 className="font-medium truncate text-sm">
+                                {pod.name}
+                              </h3>
                               <Badge
                                 variant="outline"
                                 className={`${getStatusColor(pod.status, pod.ready)} text-xs font-medium`}
@@ -388,7 +422,8 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                               {pod.restarts > 0 && (
                                 <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
                                   <RotateCcw className="h-3 w-3" />
-                                  {pod.restarts} restart{pod.restarts !== 1 ? "s" : ""}
+                                  {pod.restarts} restart
+                                  {pod.restarts !== 1 ? "s" : ""}
                                 </span>
                               )}
                             </div>
@@ -399,7 +434,10 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setLogsPod({ name: pod.name, namespace: pod.namespace })
+                                setLogsPod({
+                                  name: pod.name,
+                                  namespace: pod.namespace,
+                                });
                               }}
                               title="View logs"
                               className="h-8 w-8 p-0 hover:bg-blue-500/10 hover:text-blue-500"
@@ -409,7 +447,9 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={(e) => handleDelete(pod.name, pod.namespace, e)}
+                              onClick={(e) =>
+                                handleDelete(pod.name, pod.namespace, e)
+                              }
                               disabled={deleting.has(pod.name)}
                               title="Delete pod"
                               className="h-8 w-8 p-0 hover:bg-red-500/10 hover:text-red-500"
@@ -444,18 +484,28 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                                   </div>
                                   <div className="space-y-1 text-sm">
                                     <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Pod IP</span>
-                                      <span className="font-mono">{pod.podIP || "-"}</span>
+                                      <span className="text-muted-foreground">
+                                        Pod IP
+                                      </span>
+                                      <span className="font-mono">
+                                        {pod.podIP || "-"}
+                                      </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Node</span>
+                                      <span className="text-muted-foreground">
+                                        Node
+                                      </span>
                                       <span className="font-mono text-blue-600 dark:text-blue-400">
                                         {pod.node || "-"}
                                       </span>
                                     </div>
                                     <div className="flex justify-between">
-                                      <span className="text-muted-foreground">QoS Class</span>
-                                      <span className="font-medium">{pod.qosClass || "-"}</span>
+                                      <span className="text-muted-foreground">
+                                        QoS Class
+                                      </span>
+                                      <span className="font-medium">
+                                        {pod.qosClass || "-"}
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -464,50 +514,72 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
                                 <div className="space-y-2 p-3 rounded-lg bg-card/50">
                                   <div className="flex items-center gap-2 text-sm font-medium">
                                     <ContainerIcon className="h-4 w-4 text-amber-500" />
-                                    <span>Containers ({pod.containers?.length || 0})</span>
+                                    <span>
+                                      Containers ({pod.containers?.length || 0})
+                                    </span>
                                   </div>
                                   <div className="space-y-2 text-sm max-h-[100px] overflow-y-auto custom-scrollbar">
                                     {pod.containers?.map((c, idx) => (
-                                      <div key={idx} className="flex flex-col gap-0.5 pb-2 border-b last:border-0 last:pb-0 border-border/50">
+                                      <div
+                                        key={idx}
+                                        className="flex flex-col gap-0.5 pb-2 border-b last:border-0 last:pb-0 border-border/50"
+                                      >
                                         <div className="flex justify-between items-center">
-                                          <span className="font-medium truncate pr-2">{c.name}</span>
-                                          <Badge variant="outline" className={`text-[10px] h-4 px-1 ${c.state === "Running" ? "text-emerald-500 border-emerald-500/30" : "text-muted-foreground"
-                                            }`}>
+                                          <span className="font-medium truncate pr-2">
+                                            {c.name}
+                                          </span>
+                                          <Badge
+                                            variant="outline"
+                                            className={`text-[10px] h-4 px-1 ${
+                                              c.state === "Running"
+                                                ? "text-emerald-500 border-emerald-500/30"
+                                                : "text-muted-foreground"
+                                            }`}
+                                          >
                                             {c.state}
                                           </Badge>
                                         </div>
-                                        <span className="text-xs text-muted-foreground truncate" title={c.image}>
+                                        <span
+                                          className="text-xs text-muted-foreground truncate"
+                                          title={c.image}
+                                        >
                                           {c.image}
                                         </span>
                                       </div>
                                     ))}
-                                    {(!pod.containers || pod.containers.length === 0) && (
-                                      <span className="text-muted-foreground italic">No containers info</span>
+                                    {(!pod.containers ||
+                                      pod.containers.length === 0) && (
+                                      <span className="text-muted-foreground italic">
+                                        No containers info
+                                      </span>
                                     )}
                                   </div>
                                 </div>
                               </div>
 
                               {/* Labels */}
-                              {pod.labels && Object.keys(pod.labels).length > 0 && (
-                                <div className="pt-2">
-                                  <div className="text-sm font-medium mb-2 flex items-center gap-2">
-                                    <Tag className="h-4 w-4 text-purple-500" />
-                                    Labels
+                              {pod.labels &&
+                                Object.keys(pod.labels).length > 0 && (
+                                  <div className="pt-2">
+                                    <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                                      <Tag className="h-4 w-4 text-purple-500" />
+                                      Labels
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {Object.entries(pod.labels).map(
+                                        ([key, value]) => (
+                                          <Badge
+                                            key={key}
+                                            variant="outline"
+                                            className="text-xs bg-card/80"
+                                          >
+                                            {key}={value}
+                                          </Badge>
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {Object.entries(pod.labels).map(([key, value]) => (
-                                      <Badge
-                                        key={key}
-                                        variant="outline"
-                                        className="text-xs bg-card/80"
-                                      >
-                                        {key}={value}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
+                                )}
                             </div>
                           </motion.div>
                         )}

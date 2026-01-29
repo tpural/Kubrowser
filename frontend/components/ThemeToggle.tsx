@@ -1,17 +1,17 @@
 "use client";
-import * as React from "react"
+import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes"
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
-  const { setTheme, theme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
+  const { setTheme, theme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
-    setMounted(true)
-  }, [])
+    setMounted(true);
+  }, []);
 
   if (!mounted) {
     return (
@@ -23,10 +23,10 @@ export function ThemeToggle() {
       >
         <div className="h-4 w-4" />
       </Button>
-    )
+    );
   }
 
-  const isDark = theme === "dark"
+  const isDark = theme === "dark";
 
   return (
     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>

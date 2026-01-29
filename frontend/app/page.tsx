@@ -47,7 +47,7 @@ export default function Home() {
     handleDisconnect,
     handleReconnect,
     handleError,
-    clearError
+    clearError,
   } = useTerminalSession();
 
   const [showPodList, setShowPodList] = useState(false);
@@ -128,7 +128,7 @@ export default function Home() {
             <div>
               <h1
                 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-[#326CE5] to-[#5B8FF9] bg-clip-text text-transparent"
-                style={{ fontFamily: 'var(--font-jetbrains-mono)' }}
+                style={{ fontFamily: "var(--font-jetbrains-mono)" }}
               >
                 Kubrowser
               </h1>
@@ -190,7 +190,10 @@ export default function Home() {
                           animate={{ scale: 1, y: 0 }}
                           exit={{ scale: 0.9, y: 20 }}
                         >
-                          <Alert variant="destructive" className="max-w-2xl border-red-500/50 bg-red-950/50">
+                          <Alert
+                            variant="destructive"
+                            className="max-w-2xl border-red-500/50 bg-red-950/50"
+                          >
                             <AlertCircle className="h-4 w-4" />
                             <AlertTitle>Connection Error</AlertTitle>
                             <AlertDescription className="mt-2 space-y-3">
@@ -245,17 +248,28 @@ export default function Home() {
                   exit="exit"
                   className="w-1/2 flex flex-col"
                 >
-                  <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                    }`}>
+                  <Card
+                    className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${
+                      isPinned
+                        ? "border-amber-500/50 ring-2 ring-amber-500/20"
+                        : ""
+                    }`}
+                  >
                     {/* Panel Header */}
                     <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-blue-500/10 to-purple-500/10">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
                         <span className="text-sm font-semibold">
-                          Pods — <span className="text-blue-500">{podListNamespace}</span>
+                          Pods —{" "}
+                          <span className="text-blue-500">
+                            {podListNamespace}
+                          </span>
                         </span>
                       </div>
-                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
                         <Button
                           variant="ghost"
                           size="sm"
@@ -263,7 +277,11 @@ export default function Home() {
                           className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
                           title={isPinned ? "Unpin" : "Pin"}
                         >
-                          {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                          {isPinned ? (
+                            <PinOff className="h-4 w-4" />
+                          ) : (
+                            <Pin className="h-4 w-4" />
+                          )}
                         </Button>
                       </motion.div>
                     </div>
@@ -287,15 +305,25 @@ export default function Home() {
                   exit="exit"
                   className="w-1/2 flex flex-col"
                 >
-                  <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                    }`}>
+                  <Card
+                    className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${
+                      isPinned
+                        ? "border-amber-500/50 ring-2 ring-amber-500/20"
+                        : ""
+                    }`}
+                  >
                     {/* Panel Header */}
                     <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
                       <div className="flex items-center gap-2">
                         <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-sm font-semibold">Kubernetes Nodes</span>
+                        <span className="text-sm font-semibold">
+                          Kubernetes Nodes
+                        </span>
                       </div>
-                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
                         <Button
                           variant="ghost"
                           size="sm"
@@ -303,7 +331,11 @@ export default function Home() {
                           className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
                           title={isPinned ? "Unpin" : "Pin"}
                         >
-                          {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                          {isPinned ? (
+                            <PinOff className="h-4 w-4" />
+                          ) : (
+                            <Pin className="h-4 w-4" />
+                          )}
                         </Button>
                       </motion.div>
                     </div>

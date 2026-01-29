@@ -29,17 +29,19 @@ export function StatusBar({
           animate={{ opacity: 1, scale: 1 }}
           key={connected ? "connected" : "disconnected"}
         >
-          <Badge 
+          <Badge
             variant="outline"
             className={`font-medium px-3 py-1 ${
-              connected 
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" 
+              connected
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                 : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
             }`}
           >
-            <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-              connected ? "bg-emerald-500 status-dot-running" : "bg-red-500"
-            }`} />
+            <span
+              className={`inline-block w-2 h-2 rounded-full mr-2 ${
+                connected ? "bg-emerald-500 status-dot-running" : "bg-red-500"
+              }`}
+            />
             {connected ? (
               <span className="flex items-center gap-1.5">
                 <Wifi className="h-3 w-3" />
@@ -56,7 +58,7 @@ export function StatusBar({
 
         {/* Session Info */}
         {sessionId && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-2 text-sm"
@@ -71,7 +73,7 @@ export function StatusBar({
 
         {/* Pod Info */}
         {podName && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
@@ -95,8 +97,8 @@ export function StatusBar({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={onReconnect}
               className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25"
             >
@@ -112,9 +114,9 @@ export function StatusBar({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            <Button 
-              size="sm" 
-              variant="outline" 
+            <Button
+              size="sm"
+              variant="outline"
               onClick={onDisconnect}
               className="hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30"
             >
