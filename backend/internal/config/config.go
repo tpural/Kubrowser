@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 // Config holds the application configuration.
@@ -35,8 +37,9 @@ type ServerConfig struct {
 
 // K8sConfig holds Kubernetes client configuration.
 type K8sConfig struct {
-	KubeconfigPath string
-	Namespace      string
+	KubeconfigPath    string
+	KubeconfigContent string
+	Namespace         string
 }
 
 // PodConfig holds pod-related configuration.
@@ -57,6 +60,10 @@ type ResourceLimits struct {
 
 // Load loads configuration from environment variables with defaults.
 func Load() *Config {
+	// Attempt to load .env file from the current directory or parent directory
+	_ = godotenv.Load()
+	_ = godotenv.Load("../.env")
+
 	return &Config{
 		Server: ServerConfig{
 			Port:         getEnv("PORT", "8080"),
@@ -65,8 +72,9 @@ func Load() *Config {
 			IdleTimeout:  getDurationEnv("IDLE_TIMEOUT", 60*time.Second),
 		},
 		K8s: K8sConfig{
-			KubeconfigPath: getEnv("KUBECONFIG_PATH", getDefaultKubeconfigPath()),
-			Namespace:      getEnv("POD_NAMESPACE", "default"),
+			KubeconfigPath:    getKubeconfigPath(),
+			KubeconfigContent: getEnv("KUBECONFIG_CONTENT", ""),
+			Namespace:         getEnv("POD_NAMESPACE", "default"),
 		},
 		Pod: PodConfig{
 			Image:              getEnv("POD_IMAGE", "bitnami/kubectl:latest"),
@@ -103,6 +111,19 @@ func getIntEnv(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+func getKubeconfigPath() string {
+	// 1. Check KUBECONFIG_PATH (backward compatibility)
+	if path := os.Getenv("KUBECONFIG_PATH"); path != "" {
+		return path
+	}
+	// 2. Check standard KUBECONFIG
+	if path := os.Getenv("KUBECONFIG"); path != "" {
+		return path
+	}
+	// 3. Fallback to default (~/.kube/config)
+	return getDefaultKubeconfigPath()
 }
 
 func getDurationEnv(key string, defaultValue time.Duration) time.Duration {

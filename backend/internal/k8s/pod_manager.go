@@ -39,11 +39,17 @@ type ResourceLimits struct {
 }
 
 // NewPodManager creates a new PodManager instance.
-func NewPodManager(kubeconfigPath, namespace, image, serviceAccount string, limits ResourceLimits) (*PodManager, error) {
+func NewPodManager(kubeconfigPath, kubeconfigContent, namespace, image, serviceAccount string, limits ResourceLimits) (*PodManager, error) {
 	var config *rest.Config
 	var err error
 
-	if kubeconfigPath != "" {
+	if kubeconfigContent != "" {
+		clientConfig, err := clientcmd.NewClientConfigFromBytes([]byte(kubeconfigContent))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse kubeconfig content: %w", err)
+		}
+		config, err = clientConfig.ClientConfig()
+	} else if kubeconfigPath != "" {
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	} else {
 		config, err = rest.InClusterConfig()

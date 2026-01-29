@@ -1,0 +1,12 @@
+{
+    "name": "backend",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "go run ./cmd/server",
+        "build": "go build -o bin/server ./cmd/server",
+        "test": "go test ./... -v",
+        "lint": "golangci-lint run --timeout=5m",
+        "format": "gofmt -w . && goimports -w -local github.com/kubrowser ."
+    }
+}
