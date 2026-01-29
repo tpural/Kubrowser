@@ -1,39 +1,17 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import * as React from "react"
 import { motion, AnimatePresence } from "framer-motion";
 import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const { setTheme, theme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
 
-  useEffect(() => {
-    setMounted(true);
-    const darkMode = localStorage.getItem("theme") === "dark" ||
-      (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    
-    setIsDark(darkMode);
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    
-    if (newIsDark) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
 
   if (!mounted) {
     return (
@@ -45,15 +23,17 @@ export function ThemeToggle() {
       >
         <div className="h-4 w-4" />
       </Button>
-    );
+    )
   }
+
+  const isDark = theme === "dark"
 
   return (
     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
       <Button
         variant="outline"
         size="icon"
-        onClick={toggleTheme}
+        onClick={() => setTheme(isDark ? "light" : "dark")}
         className="h-9 w-9 relative overflow-hidden border-2 hover:border-primary/50 transition-colors"
         aria-label="Toggle theme"
       >

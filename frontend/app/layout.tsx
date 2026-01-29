@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,30 +34,37 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jetbrainsMono.variable} antialiased`}
       >
-        {children}
-        <Toaster 
-          position="bottom-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              background: 'hsl(var(--card))',
-              color: 'hsl(var(--card-foreground))',
-              border: '1px solid hsl(var(--border))',
-            },
-            success: {
-              iconTheme: {
-                primary: '#22c55e',
-                secondary: 'white',
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster
+            position="bottom-right"
+            toastOptions={{
+              duration: 3000,
+              style: {
+                background: 'hsl(var(--card))',
+                color: 'hsl(var(--card-foreground))',
+                border: '1px solid hsl(var(--border))',
               },
-            },
-            error: {
-              iconTheme: {
-                primary: '#ef4444',
-                secondary: 'white',
+              success: {
+                iconTheme: {
+                  primary: '#22c55e',
+                  secondary: 'white',
+                },
               },
-            },
-          }}
-        />
+              error: {
+                iconTheme: {
+                  primary: '#ef4444',
+                  secondary: 'white',
+                },
+              },
+            }}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );
