@@ -315,11 +315,23 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
         // Provide detailed error information based on close code
         // Only report errors for abnormal closures (not normal shutdowns)
         if (event.code !== 1000 && event.code !== 1001) {
-          let errorMessage = "";
+          // Check for authentication failure by making a probe request
+          const httpProtocol = window.location.protocol === "https:" ? "https:" : "http:";
+          fetch(`${httpProtocol}//${host}/api/v1/namespaces`, {
+            credentials: 'include'
+          })
+            .then((res) => {
+              if (res.status === 401) {
+                window.location.href = "/login";
+                return;
+              }
+            })
+            .catch(() => { });
 
+          let errorMessage = "";
           switch (event.code) {
             case 1006:
-              errorMessage = `Unable to connect to backend server at ${host}. Please ensure the backend is running (try: make dev or start the backend server on port 8080).`;
+              errorMessage = `Unable to connect to backend. Checking authentication...`;
               break;
             case 1002:
               errorMessage = "WebSocket protocol error occurred.";
@@ -469,17 +481,22 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(({
     connectWebSocket();
 
     return () => {
-      initializedRef.current = false;
-      connectingRef.current = false;
-      window.removeEventListener("resize", handleResize);
-      // observer is removed, no need to disconnect
-      if (wsRef.current) {
-        wsRef.current.close(1000, "Component unmounting");
-        wsRef.current = null;
-      }
-      if (xtermRef.current) {
-        xtermRef.current.dispose();
-        xtermRef.current = null;
+      // Don't close WebSocket during development hot reload
+      if (process.env.NODE_ENV === 'production') {
+        initializedRef.current = false;
+        connectingRef.current = false;
+        window.removeEventListener("resize", handleResize);
+        if (wsRef.current) {
+          wsRef.current.close(1000, "Component unmounting");
+          wsRef.current = null;
+        }
+        if (xtermRef.current) {
+          xtermRef.current.dispose();
+          xtermRef.current = null;
+        }
+      } else {
+        // In development, only remove event listener but keep WebSocket alive
+        window.removeEventListener("resize", handleResize);
       }
     };
     // Only run once on mount - don't depend on sessionId to prevent reconnections

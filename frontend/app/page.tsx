@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Terminal, TerminalHandle } from "@/components/Terminal";
 import { StatusBar } from "@/components/StatusBar";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
 import { PodList } from "@/components/PodList";
 import { NodeList } from "@/components/NodeList";
 import { Card } from "@/components/ui/card";
@@ -33,6 +33,8 @@ const slideVariants = {
 };
 
 import { useTerminalSession } from "@/hooks/useTerminalSession";
+import { useAuth } from "@/hooks/useAuth";
+import { SplashScreen } from "@/components/SplashScreen";
 
 export default function Home() {
   const {
@@ -53,6 +55,8 @@ export default function Home() {
   const [showNodeList, setShowNodeList] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const terminalRef = useRef<TerminalHandle>(null);
+
+  const { user, loading, login } = useAuth();
 
   const handleCommandDetected = (command: string, namespace?: string) => {
     if (isPinned) {
@@ -140,7 +144,7 @@ export default function Home() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <ThemeToggle />
+              <UserMenu />
             </motion.div>
           </div>
         </div>
@@ -148,166 +152,170 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden p-4">
-        <div className="h-full flex gap-4">
-          {/* Terminal Panel */}
-          <motion.div
-            layout
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`${hasPopout ? "w-1/2" : "w-full"} flex flex-col`}
-          >
-            <Card className="flex-1 flex flex-col shadow-xl border-2 overflow-hidden bg-card/50 backdrop-blur-sm">
-              {/* Terminal Header */}
-              <div className="p-3 border-b bg-gradient-to-r from-muted/50 to-muted/30">
-                <StatusBar
-                  connected={connected}
-                  sessionId={sessionId}
-                  podName={podName}
-                  onReconnect={handleReconnect}
-                  onDisconnect={handleDisconnect}
-                />
-              </div>
+        {loading || !user ? (
+          <SplashScreen onLogin={login} loading={loading} />
+        ) : (
+          <div className="h-full flex gap-4">
+            {/* Terminal Panel */}
+            <motion.div
+              layout
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className={`${hasPopout ? "w-1/2" : "w-full"} flex flex-col`}
+            >
+              <Card className="flex-1 flex flex-col shadow-xl border-2 overflow-hidden bg-card/50 backdrop-blur-sm">
+                {/* Terminal Header */}
+                <div className="p-3 border-b bg-gradient-to-r from-muted/50 to-muted/30">
+                  <StatusBar
+                    connected={connected}
+                    sessionId={sessionId}
+                    podName={podName}
+                    onReconnect={handleReconnect}
+                    onDisconnect={handleDisconnect}
+                  />
+                </div>
 
-              {/* Terminal Content */}
-              <div className="flex-1 overflow-hidden p-4 bg-background relative">
-                {/* Error Overlay */}
-                <AnimatePresence>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
-                    >
+                {/* Terminal Content */}
+                <div className="flex-1 overflow-hidden p-4 bg-background relative">
+                  {/* Error Overlay */}
+                  <AnimatePresence>
+                    {error && (
                       <motion.div
-                        initial={{ scale: 0.9, y: 20 }}
-                        animate={{ scale: 1, y: 0 }}
-                        exit={{ scale: 0.9, y: 20 }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-20 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
                       >
-                        <Alert variant="destructive" className="max-w-2xl border-red-500/50 bg-red-950/50">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertTitle>Connection Error</AlertTitle>
-                          <AlertDescription className="mt-2 space-y-3">
-                            <p>{error}</p>
-                            <div className="flex gap-2 pt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleReconnect}
-                                className="border-red-500/50 hover:bg-red-500/10"
-                              >
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Retry Connection
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={clearError}
-                              >
-                                Dismiss
-                              </Button>
-                            </div>
-                          </AlertDescription>
-                        </Alert>
+                        <motion.div
+                          initial={{ scale: 0.9, y: 20 }}
+                          animate={{ scale: 1, y: 0 }}
+                          exit={{ scale: 0.9, y: 20 }}
+                        >
+                          <Alert variant="destructive" className="max-w-2xl border-red-500/50 bg-red-950/50">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Connection Error</AlertTitle>
+                            <AlertDescription className="mt-2 space-y-3">
+                              <p>{error}</p>
+                              <div className="flex gap-2 pt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleReconnect}
+                                  className="border-red-500/50 hover:bg-red-500/10"
+                                >
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                  Retry Connection
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={clearError}
+                                >
+                                  Dismiss
+                                </Button>
+                              </div>
+                            </AlertDescription>
+                          </Alert>
+                        </motion.div>
                       </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                    )}
+                  </AnimatePresence>
 
-                <Terminal
-                  ref={terminalRef}
-                  sessionId={sessionId}
-                  onConnect={handleConnect}
-                  onDisconnect={handleDisconnect}
-                  onError={handleError}
-                  shouldDisconnect={shouldDisconnect}
-                  onCommandDetected={handleCommandDetected}
-                  onCommandClose={handleCommandClose}
-                />
-              </div>
-            </Card>
-          </motion.div>
+                  <Terminal
+                    ref={terminalRef}
+                    sessionId={sessionId}
+                    onConnect={handleConnect}
+                    onDisconnect={handleDisconnect}
+                    onError={handleError}
+                    shouldDisconnect={shouldDisconnect}
+                    onCommandDetected={handleCommandDetected}
+                    onCommandClose={handleCommandClose}
+                  />
+                </div>
+              </Card>
+            </motion.div>
 
-          {/* Popout Panels */}
-          <AnimatePresence mode="wait">
-            {showPodList && (
-              <motion.div
-                key="podlist"
-                variants={slideVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                className="w-1/2 flex flex-col"
-              >
-                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                  }`}>
-                  {/* Panel Header */}
-                  <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-blue-500/10 to-purple-500/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-sm font-semibold">
-                        Pods — <span className="text-blue-500">{podListNamespace}</span>
-                      </span>
+            {/* Popout Panels */}
+            <AnimatePresence mode="wait">
+              {showPodList && (
+                <motion.div
+                  key="podlist"
+                  variants={slideVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="w-1/2 flex flex-col"
+                >
+                  <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
+                    }`}>
+                    {/* Panel Header */}
+                    <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-blue-500/10 to-purple-500/10">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                        <span className="text-sm font-semibold">
+                          Pods — <span className="text-blue-500">{podListNamespace}</span>
+                        </span>
+                      </div>
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={togglePin}
+                          className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
+                          title={isPinned ? "Unpin" : "Pin"}
+                        >
+                          {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                        </Button>
+                      </motion.div>
                     </div>
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={togglePin}
-                        className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
-                        title={isPinned ? "Unpin" : "Pin"}
-                      >
-                        {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                      </Button>
-                    </motion.div>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <PodList
-                      key={podListNamespace}
-                      namespace={podListNamespace}
-                      onClose={handlePodListClose}
-                    />
-                  </div>
-                </Card>
-              </motion.div>
-            )}
-
-            {showNodeList && (
-              <motion.div
-                key="nodelist"
-                variants={slideVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                className="w-1/2 flex flex-col"
-              >
-                <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
-                  }`}>
-                  {/* Panel Header */}
-                  <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-sm font-semibold">Kubernetes Nodes</span>
+                    <div className="flex-1 overflow-hidden">
+                      <PodList
+                        key={podListNamespace}
+                        namespace={podListNamespace}
+                        onClose={handlePodListClose}
+                      />
                     </div>
-                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={togglePin}
-                        className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
-                        title={isPinned ? "Unpin" : "Pin"}
-                      >
-                        {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-                      </Button>
-                    </motion.div>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <NodeList onClose={handleNodeListClose} />
-                  </div>
-                </Card>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                  </Card>
+                </motion.div>
+              )}
+
+              {showNodeList && (
+                <motion.div
+                  key="nodelist"
+                  variants={slideVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  className="w-1/2 flex flex-col"
+                >
+                  <Card className={`flex-1 flex flex-col shadow-xl border-2 overflow-hidden transition-colors duration-300 ${isPinned ? "border-amber-500/50 ring-2 ring-amber-500/20" : ""
+                    }`}>
+                    {/* Panel Header */}
+                    <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-emerald-500/10 to-teal-500/10">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-sm font-semibold">Kubernetes Nodes</span>
+                      </div>
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={togglePin}
+                          className={`h-8 w-8 p-0 ${isPinned ? "text-amber-500 bg-amber-500/10" : "hover:bg-muted"}`}
+                          title={isPinned ? "Unpin" : "Pin"}
+                        >
+                          {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+                        </Button>
+                      </motion.div>
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <NodeList onClose={handleNodeListClose} />
+                    </div>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </div>
   );

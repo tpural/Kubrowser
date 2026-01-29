@@ -120,7 +120,7 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
     try {
       const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/v1/pods?namespace=${encodeURIComponent(namespace)}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) {
         if (response.status === 404 || response.status === 403) {
           setError(`Namespace "${namespace}" not found or access denied.`);
@@ -181,7 +181,7 @@ export function PodList({ namespace = "default", onClose }: PodListProps) {
       const apiUrl = getApiUrl();
       const response = await fetch(
         `${apiUrl}/api/v1/pods/${podName}?namespace=${encodeURIComponent(targetNamespace)}`,
-        { method: "DELETE" }
+        { method: "DELETE", credentials: 'include' }
       );
       if (!response.ok) {
         throw new Error(`Failed to delete pod: ${response.statusText}`);

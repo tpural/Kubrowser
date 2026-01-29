@@ -286,6 +286,17 @@ export function PodExec({ podName, namespace, onClose }: PodExecProps) {
           if (event.code !== 1000 && event.code !== 1001) {
             let errorMsg = `\r\n\x1b[31m✗ Connection closed`;
             if (event.code === 1006) {
+              // Check for authentication failure
+              const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+              const apiUrl = getApiUrl();
+              fetch(`${protocol}//${apiUrl}/api/v1/namespaces`)
+                .then((res) => {
+                  if (res.status === 401) {
+                    window.location.href = "/login";
+                  }
+                })
+                .catch(() => { });
+
               errorMsg += " - Unable to connect to backend server";
               errorMsg += "\r\n\x1b[33mPossible causes:\x1b[0m";
               errorMsg += "\r\n  • Backend server not running";

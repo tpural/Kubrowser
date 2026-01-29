@@ -160,6 +160,9 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 	// Monitor WebSocket connection state by checking write capability
 	// This doesn't interfere with reads (which happen in stdinStream)
 	go func() {
+		// Wait a bit before starting pings to allow session message to be sent first
+		time.Sleep(500 * time.Millisecond)
+
 		ticker := time.NewTicker(1 * time.Second)
 		heartbeatTicker := time.NewTicker(30 * time.Second) // Heartbeat every 30s
 		defer ticker.Stop()

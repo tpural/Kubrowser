@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,16 @@ type Config struct {
 	Server ServerConfig
 	K8s    K8sConfig
 	Pod    PodConfig
+	Auth   AuthConfig
+}
+
+// AuthConfig holds authentication configuration.
+type AuthConfig struct {
+	GitHubClientID     string
+	GitHubClientSecret string
+	SessionSecret      string
+	AllowedUsers       []string
+	BaseURL            string
 }
 
 // ServerConfig holds server-related configuration.
@@ -68,6 +79,13 @@ func Load() *Config {
 				Memory: getEnv("POD_MEMORY_LIMIT", "512Mi"),
 			},
 		},
+		Auth: AuthConfig{
+			GitHubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
+			GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
+			SessionSecret:      getEnv("SESSION_SECRET", "change-me-in-production-secret-key-must-be-32-bytes"),
+			AllowedUsers:       getStringSliceEnv("ALLOWED_USERS", []string{"tpural", "gregyjames"}),
+			BaseURL:            getEnv("BASE_URL", "http://localhost:8080"),
+		},
 	}
 }
 
@@ -107,4 +125,11 @@ func getDefaultKubeconfigPath() string {
 		return kubeconfigPath
 	}
 	return ""
+}
+
+func getStringSliceEnv(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		return strings.Split(value, ",")
+	}
+	return defaultValue
 }

@@ -162,7 +162,7 @@ export function NodeList({ onClose }: NodeListProps) {
     try {
       const apiUrl = getApiUrl();
       const url = `${apiUrl}/api/v1/nodes`;
-      const response = await fetch(url);
+      const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) {
         setError(`Failed to fetch nodes: ${response.statusText}`);
         setNodes([]);

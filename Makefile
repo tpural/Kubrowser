@@ -73,11 +73,19 @@ dev: ## Start development servers
 	@echo "Starting development servers..."
 	@echo "Backend: http://localhost:8080"
 	@echo "Frontend: http://localhost:3000"
+	@if [ -f .env ]; then \
+		echo "Loading environment from .env file..."; \
+	fi
 	@export KUBECONFIG_PATH=$${HOME}/.kube/config; \
 	export NVM_DIR="$$HOME/.nvm"; \
 	[ -s "$$NVM_DIR/nvm.sh" ] && \. "$$NVM_DIR/nvm.sh"; \
 	[ -s "$$NVM_DIR/nvm.sh" ] && nvm use 20; \
 	trap 'kill 0' EXIT; \
+	if [ -f .env ]; then \
+		set -a; \
+		. ./.env; \
+		set +a; \
+	fi; \
 	cd backend && KUBECONFIG_PATH=$${HOME}/.kube/config go run ./cmd/server & \
 	cd frontend && npm run dev & \
 	wait
