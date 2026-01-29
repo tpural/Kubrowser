@@ -130,11 +130,12 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		// Ensure pod is deleted when function exits (defer ensures this runs)
+		// DO NOT delete pod here. We want it to persist for reconnection.
+		// The background reaper will clean it up if not used.
 		h.logger.WithFields(logrus.Fields{
 			"session_id": sessionID,
 			"pod_name":   sess.PodName,
-		}).Info("Handler function exiting, ensuring pod deletion")
+		}).Info("Handler function exiting")
 	}()
 
 	// Monitor WebSocket connection and cancel context when it closes
@@ -146,6 +147,12 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 			"code":       code,
 			"text":       text,
 		}).Info("WebSocket close handler triggered, canceling exec stream")
+
+		// Update heartbeat one last time before disconnect
+		if err := h.podManager.UpdatePodHeartbeat(context.Background(), sess.PodName); err != nil {
+			h.logger.WithError(err).Warn("Failed to update heartbeat on disconnect")
+		}
+
 		cancel()
 		return nil
 	})
@@ -154,7 +161,10 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 	// This doesn't interfere with reads (which happen in stdinStream)
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
+		heartbeatTicker := time.NewTicker(30 * time.Second) // Heartbeat every 30s
 		defer ticker.Stop()
+		defer heartbeatTicker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
@@ -170,6 +180,11 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 					}).Info("WebSocket ping failed, connection closed, canceling exec stream")
 					cancel()
 					return
+				}
+			case <-heartbeatTicker.C:
+				// Keep pod alive
+				if err := h.podManager.UpdatePodHeartbeat(ctx, sess.PodName); err != nil {
+					h.logger.WithError(err).Warn("Failed to update pod heartbeat")
 				}
 			case <-ctx.Done():
 				return
@@ -255,22 +270,9 @@ func (h *Handlers) HandleWebSocket(c *gin.Context) {
 	h.logger.WithFields(logrus.Fields{
 		"session_id": sessionID,
 		"pod_name":   sess.PodName,
-	}).Info("WebSocket disconnected, deleting pod")
+	}).Info("WebSocket disconnected")
 
-	deleteCtx, deleteCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer deleteCancel()
-
-	if err := h.podManager.DeletePod(deleteCtx, sess.PodName); err != nil {
-		h.logger.WithError(err).
-			WithField("session_id", sessionID).
-			WithField("pod_name", sess.PodName).
-			Error("Failed to delete pod on disconnect")
-	} else {
-		h.logger.WithFields(logrus.Fields{
-			"session_id": sessionID,
-			"pod_name":   sess.PodName,
-		}).Info("Pod deleted successfully (or already deleted)")
-	}
+	// We no longer delete the pod here. It will be reaped if not reconnected.
 
 	// Session cleanup happens above (pod deletion)
 }

@@ -11,20 +11,25 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+const (
+	HeartbeatAnnotation = "kubrowser.io/last-heartbeat"
+)
+
 // PodManager handles creation and deletion of temporary Kubernetes pods.
 type PodManager struct {
-	client        kubernetes.Interface
-	config        *rest.Config
-	namespace     string
-	image         string
+	client         kubernetes.Interface
+	config         *rest.Config
+	namespace      string
+	image          string
 	serviceAccount string
-	limits        ResourceLimits
+	limits         ResourceLimits
 }
 
 // ResourceLimits holds CPU and memory limits.
@@ -79,17 +84,17 @@ func sanitizeUsername(username string) string {
 	if username == "" {
 		username = "anonymous"
 	}
-	
+
 	// Convert to lowercase
 	username = strings.ToLower(username)
-	
+
 	// Replace invalid characters with hyphens (keep alphanumeric, dots, and hyphens)
 	re := regexp.MustCompile(`[^a-z0-9.-]`)
 	username = re.ReplaceAllString(username, "-")
-	
+
 	// Remove leading/trailing dots and hyphens
 	username = strings.Trim(username, "-.")
-	
+
 	// Ensure it starts and ends with alphanumeric
 	if len(username) > 0 && !isAlphanumeric(rune(username[0])) {
 		username = "u" + username
@@ -97,7 +102,7 @@ func sanitizeUsername(username string) string {
 	if len(username) > 0 && !isAlphanumeric(rune(username[len(username)-1])) {
 		username = username + "0"
 	}
-	
+
 	// Truncate to 63 characters (Kubernetes limit)
 	if len(username) > 63 {
 		username = username[:63]
@@ -106,12 +111,12 @@ func sanitizeUsername(username string) string {
 			username = username[:62] + "0"
 		}
 	}
-	
+
 	// If empty after sanitization, use default
 	if username == "" {
 		username = "anonymous"
 	}
-	
+
 	return username
 }
 
@@ -132,10 +137,10 @@ func (pm *PodManager) CreatePod(ctx context.Context, sessionID string) (*v1.Pod,
 func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, username string, startTime time.Time, statusCallback StatusCallback) (*v1.Pod, error) {
 	// Sanitize username for Kubernetes naming requirements
 	sanitizedUsername := sanitizeUsername(username)
-	
+
 	// Generate pod name: kubrowser-{username}
 	podName := fmt.Sprintf("kubrowser-%s", sanitizedUsername)
-	
+
 	// Ensure pod name doesn't exceed 63 characters (Kubernetes limit)
 	if len(podName) > 63 {
 		// Truncate username if needed (leave room for "kubrowser-" prefix which is 10 chars)
@@ -145,15 +150,27 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 			podName = fmt.Sprintf("kubrowser-%s", sanitizedUsername)
 		}
 	}
-	
+
+	// Check if a pod with this name already exists and reuse it if possible
+	existingPod, err := pm.FindExistingPod(ctx, username)
+	if err == nil && existingPod != nil {
+		if statusCallback != nil {
+			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[32m[✓] Found existing session for %s\x1b[0m\r\n", sanitizedUsername))
+		}
+		// Update heartbeat to ensure it doesn't get reaped immediately
+		_ = pm.UpdatePodHeartbeat(ctx, existingPod.Name)
+		return existingPod, nil
+	}
+
 	// Check if a pod with this name already exists and wait for it to be fully deleted
-	existingPod, err := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
+
+	existingPod, err = pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
 	if err == nil && existingPod != nil {
 		// Pod exists, delete it first and wait for it to be fully gone
 		if statusCallback != nil {
 			statusCallback(fmt.Sprintf("\r\x1b[K\x1b[33m[ ] Cleaning up existing pod for user %s...\x1b[0m", sanitizedUsername))
 		}
-		
+
 		// Only delete if not already terminating
 		if existingPod.DeletionTimestamp == nil {
 			deletePolicy := metav1.DeletePropagationForeground
@@ -166,7 +183,7 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 				}
 			}
 		}
-		
+
 		// Wait for pod to be fully deleted (up to 60 seconds)
 		waitStart := time.Now()
 		waitErr := wait.PollUntilContextTimeout(ctx, 1*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
@@ -184,14 +201,14 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 			}
 			return false, nil
 		})
-		
+
 		if waitErr != nil {
 			if statusCallback != nil {
 				statusCallback("\r\x1b[K\x1b[31m[✗] Timeout waiting for old pod to terminate\x1b[0m\r\n")
 			}
 			return nil, fmt.Errorf("timeout waiting for existing pod to terminate: %w", waitErr)
 		}
-		
+
 		if statusCallback != nil {
 			statusCallback("\r\x1b[K\x1b[32m[✓] Previous session cleaned up\x1b[0m\r\n")
 		}
@@ -207,7 +224,7 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 		return nil, fmt.Errorf("invalid memory limit: %w", err)
 	}
 
-		pod := &v1.Pod{
+	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: pm.namespace,
@@ -217,9 +234,12 @@ func (pm *PodManager) CreatePodWithStatus(ctx context.Context, sessionID, userna
 				"username":   sanitizedUsername,
 				"managed-by": "kubrowser-backend",
 			},
+			Annotations: map[string]string{
+				HeartbeatAnnotation: time.Now().Format(time.RFC3339),
+			},
 		},
 		Spec: v1.PodSpec{
-			Hostname: "kubrowser",
+			Hostname:           "kubrowser",
 			ServiceAccountName: pm.serviceAccount,
 			Containers: []v1.Container{
 				{
@@ -361,7 +381,7 @@ func (pm *PodManager) DeletePod(ctx context.Context, podName string) error {
 	err := pm.client.CoreV1().Pods(pm.namespace).Delete(ctx, podName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	})
-	
+
 	// If pod is not found, it's already deleted - this is fine
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -369,7 +389,7 @@ func (pm *PodManager) DeletePod(ctx context.Context, podName string) error {
 		}
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -415,6 +435,131 @@ func (pm *PodManager) IsPodReady(ctx context.Context, podName string) (bool, err
 	}
 
 	return false, nil
+}
+
+// FindExistingPod checks for an existing running pod for the given username.
+// Returns the pod if found and running, nil otherwise.
+func (pm *PodManager) FindExistingPod(ctx context.Context, username string) (*v1.Pod, error) {
+	sanitizedUsername := sanitizeUsername(username)
+	podName := fmt.Sprintf("kubrowser-%s", sanitizedUsername)
+
+	// Ensure pod name consistency with creation logic
+	if len(podName) > 63 {
+		maxUsernameLen := 63 - 10
+		if maxUsernameLen > 0 && len(sanitizedUsername) > maxUsernameLen {
+			sanitizedUsername = sanitizedUsername[:maxUsernameLen]
+			podName = fmt.Sprintf("kubrowser-%s", sanitizedUsername)
+		}
+	}
+
+	pod, err := pm.client.CoreV1().Pods(pm.namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Check if pod is usable (Running and not deleting)
+	if pod.Status.Phase == v1.PodRunning && pod.DeletionTimestamp == nil {
+		// Also verify it's ready
+		for _, condition := range pod.Status.Conditions {
+			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
+				return pod, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+// UpdatePodHeartbeat updates the last-heartbeat annotation on the pod.
+func (pm *PodManager) UpdatePodHeartbeat(ctx context.Context, podName string) error {
+	timestamp := time.Now().Format(time.RFC3339)
+
+	// Create patch to update annotation
+	patchData := []byte(fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, HeartbeatAnnotation, timestamp))
+
+	_, err := pm.client.CoreV1().Pods(pm.namespace).Patch(ctx, podName, types.MergePatchType, patchData, metav1.PatchOptions{})
+	return err
+}
+
+// CleanupStalePods deletes pods that haven't had a heartbeat for the specified duration.
+func (pm *PodManager) CleanupStalePods(ctx context.Context, timeout time.Duration) error {
+	pods, err := pm.ListPods(ctx)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	deletedCount := 0
+
+	for _, pod := range pods {
+		// Skip if already deleting
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		lastHeartbeatStr, ok := pod.Annotations[HeartbeatAnnotation]
+		if !ok {
+			// No heartbeat? Assume it's old/legacy or just started.
+			// Check creation timestamp as fallback
+			if now.Sub(pod.CreationTimestamp.Time) > timeout {
+				// Old pod with no heartbeat (or legacy), delete it
+				_ = pm.DeletePod(ctx, pod.Name)
+				deletedCount++
+			}
+			continue
+		}
+
+		lastHeartbeat, err := time.Parse(time.RFC3339, lastHeartbeatStr)
+		if err != nil {
+			// Invalid format? safe to ignore or delete? Let's check creation time as fallback
+			if now.Sub(pod.CreationTimestamp.Time) > timeout {
+				_ = pm.DeletePod(ctx, pod.Name)
+				deletedCount++
+			}
+			continue
+		}
+
+		if now.Sub(lastHeartbeat) > timeout {
+			// Stale pod
+			fmt.Printf("Reaping stale pod: %s (last heartbeat: %s)\n", pod.Name, lastHeartbeatStr)
+			if err := pm.DeletePod(ctx, pod.Name); err != nil {
+				fmt.Printf("Failed to reap pod %s: %v\n", pod.Name, err)
+			} else {
+				deletedCount++
+			}
+		}
+	}
+
+	if deletedCount > 0 {
+		fmt.Printf("Reaper: Cleaned up %d stale pods\n", deletedCount)
+	}
+
+	return nil
+}
+
+// StartReaper starts a background goroutine to clean up stale pods.
+func (pm *PodManager) StartReaper(ctx context.Context, checkInterval, timeout time.Duration) {
+	go func() {
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		fmt.Printf("Pod Reaper started (Interval: %v, Timeout: %v)\n", checkInterval, timeout)
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := pm.CleanupStalePods(ctx, timeout); err != nil {
+					fmt.Printf("Reaper error: %v\n", err)
+				}
+			case <-ctx.Done():
+				fmt.Println("Pod Reaper stopped")
+				return
+			}
+		}
+	}()
 }
 
 // GetClient returns the Kubernetes client.
