@@ -26,7 +26,7 @@ repos:
     hooks:
       - id: backend-lint
         name: Backend Lint (golangci-lint)
-        entry: bash -c "cd backend && /home/tpural/go/bin/golangci-lint run"
+        entry: bash -c "cd backend && golangci-lint run"
         language: system
         files: ^backend/
         pass_filenames: false
