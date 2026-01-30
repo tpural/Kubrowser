@@ -1,78 +1,16 @@
-# Kubrowser
+![powered by vibes](https://img.shields.io/badge/powered%20by-vibes-7c3aed?style=flat)
 
-A browser-based terminal tool that allows you to access kubectl through temporary Kubernetes pods. Each browser session spawns a dedicated pod with kubectl installed, providing isolated terminal access via WebSocket.
+# Kubrowser
+A browser-based terminal for my Kubernetes homelab. Lets me give friends shell access to my cluster through temporary pods without handing out SSH keys or teaching them how to configure kubectl. I'm fully expecting them to break my cluster, but let's be honest, building it was half the fun.
+
+
+> Kubrowser was 100% vibe coded while holding a baby in one arm. I might polish it up later. Maybe.
+
+
 
 ## Features
 
-- 🌐 **Browser-based terminal** - Access kubectl from any modern web browser
-- 🚀 **Automatic pod management** - Temporary pods are created and cleaned up automatically
-- 🔒 **Session isolation** - Each user session gets its own isolated pod
-- ⚡ **Real-time terminal** - WebSocket-based terminal with full TTY support
-
-## Prerequisites
-
-- Go 1.22 or later
-- Node.js 20.9.0 or later
-- Kubernetes cluster access
-- kubectl configured (for local development)
-- Docker (for containerized deployment)
-
-## Quick Start
-
-### Local Development
-
-1. **Install dependencies**
-
-   ```bash
-   # Backend
-   cd backend && go mod download
-
-   # Frontend
-   cd frontend && npm install
-   ```
-
-2. **Start development servers**
-
-   ```bash
-   make dev
-   ```
-
-   This starts both the backend (port 8080) and frontend (port 3000).
-
-3. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8080
-
-### Setup Kubernetes RBAC
-
-Before using Kubrowser, you need to set up the required RBAC permissions:
-
-```bash
-# Backend RBAC (for creating/deleting pods)
-kubectl apply -f k8s/rbac.yaml
-
-# Kubectl pod RBAC (required for pods to have kubectl permissions)
-kubectl apply -f k8s/kubectl-pod-rbac.yaml
-```
-
-## Project Structure
-
-```
-Kubrowser/
-├── backend/          # Go backend API server
-│   ├── cmd/server/   # Main application entry point
-│   └── internal/     # Internal packages
-│       ├── api/      # HTTP/WebSocket handlers
-│       ├── k8s/      # Kubernetes client and pod management
-│       ├── session/  # Session management
-│       └── terminal/ # Terminal execution
-├── frontend/         # Next.js frontend
-│   ├── app/          # Next.js app directory
-│   └── components/   # React components
-├── k8s/              # Kubernetes manifests
-└── scripts/          # Utility scripts
-```
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- Browser-based terminal with WebSocket TTY
+- Automatic pod creation and cleanup
+- Isolated sessions per user
+- Pod and node commads trigger popouts which show results and add shortcut buttons
